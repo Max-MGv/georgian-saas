@@ -157,19 +157,28 @@ export async function createWineOrderAdmin(input: {
     email: string | null
   }[]
   wines: { vintageId: string; quantity: number }[]
+  /**
+   * T-22 guest purchase — bottles a guest bought during a booking's visit, recorded as an ordinary wine order (so every rule
+   * above applies to it: website price, per-line rounding, statistics) linked to that booking. Forces an INDIVIDUAL pickup, makes
+   * the phone optional (Max, D-20: it is a sale over the counter, not a delivery to chase) and never touches the booking's total
+   * or invoice. The booking is verified under the tenant here, not trusted from the caller.
+   */
+  sourceOrderId?: string | null
 }): Promise<{ orderId: string } | { error: string }> {
-  await requireAdmin()
-  const isIndividual = input.customerType === 'INDIVIDUAL'
+  const actor = await requireAdmin()
+  const sourceOrderId = input.sourceOrderId || null
+  const isIndividual = input.customerType === 'INDIVIDUAL' || sourceOrderId != null
   const data = isIndividual
     ? { ...input, companyId: null, companyAddressId: null, llcName: null, llcId: null, contacts: undefined,
-        businessName: input.businessName.trim() || input.contactName }
+        businessName: input.businessName.trim() || input.contactName,
+        ...(sourceOrderId ? { fulfilment: 'PICKUP' as const, zoneChoice: null, preferredDate: null } : {}) }
     : input
   if (!data.businessName.trim()) return { error: 'Business / customer name is required.' }
   const isPickup = data.fulfilment === 'PICKUP'
   if (!isPickup && !data.address.trim() && !data.companyAddressId) return { error: 'Address is required.' }
   if (data.preferredDate && !isIsoDate(data.preferredDate)) return { error: 'Please enter a valid date.' }
   if (!data.contactName.trim()) return { error: 'Contact name is required.' }
-  if (!data.contactPhone.trim()) return { error: 'Contact phone is required.' }
+  if (!sourceOrderId && !data.contactPhone.trim()) return { error: 'Contact phone is required.' }
 
   // Whole bottles only (same rule as the public form) — a fraction crashed the pricing.
   if (data.wines.some(w => !Number.isInteger(w.quantity) || w.quantity < 0 || w.quantity > 1000)) {
@@ -224,12 +233,20 @@ export async function createWineOrderAdmin(input: {
     company?.wineDiscountPercent ?? null,
   )
   const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
+  const pricedLine = new Map(pricing.lines.map(l => [l.vintageId, l]))
   const discountPercent = pricing.discountPercent
   const totalAmount = pricing.total
 
   const orderId = await withTenantDb(tenantId, async (tx) => {
+    if (sourceOrderId) {
+      // The visit this was bought on: must be this winery's own booking, and a live one (a cancelled or abandoned booking has no
+      // visit to sell on).
+      const visit = await tx.order.findFirst({ where: { id: sourceOrderId, tenantId, abandonedAt: null, stage: { not: 'CANCELLED' } }, select: { id: true } })
+      if (!visit) return null
+    }
     const order = await tx.wineOrder.create({
       data: {
+        sourceOrderId,
         businessName: data.businessName.trim(),
         llcName: data.llcName?.trim() || null,
         llcId: data.llcId?.trim() || null,
@@ -258,6 +275,9 @@ export async function createWineOrderAdmin(input: {
         vintageYearSnapshot: vintageMap[w.vintageId].year,
         priceSnapshot: unitPrice[w.vintageId],
         quantity: w.quantity,
+        negotiated: pricedLine.get(w.vintageId)!.negotiated,
+        discountPercent: pricedLine.get(w.vintageId)!.discountPercent,
+        lineTotal: pricedLine.get(w.vintageId)!.lineTotal,
       })),
     })
     // Same rows the public wine path writes — one write path per order type, shared
@@ -275,11 +295,25 @@ export async function createWineOrderAdmin(input: {
         email: data.contactEmail?.trim() || null,
       },
     })
+    if (sourceOrderId) {
+      // On the booking's history, so the visit shows what was sold on it (written only once this code is live — see the
+      // enum migration note in vault/Plan-AddOnsAndWine.md §4.8).
+      await recordOrderEvent(tx, {
+        tenantId,
+        orderId: sourceOrderId,
+        type: 'GUEST_PURCHASE_LINKED',
+        actorType: 'ADMIN',
+        actorId: actor?.id ?? null,
+        payload: { wineOrderId: order.id, amount: totalAmount, bottles: selectedWines.reduce((s, w) => s + w.quantity, 0) },
+      })
+    }
     return order.id
   })
+  if (orderId === null) return { error: 'That booking is no longer open for sales.' }
 
   revalidatePath('/admin/wine-orders')
   revalidatePath('/admin/statistics')
+  if (sourceOrderId) revalidatePath(`/admin/orders/${sourceOrderId}`)
   return { orderId }
 }
 

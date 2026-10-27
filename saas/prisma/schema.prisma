@@ -342,6 +342,9 @@ model InvoiceSent {
   tastingLunchGuests Int @default(0)
   visitType         String
   masterclassLines  Json
+  /// Wine for the table as billed (T-22): [{ name, year, quantity, unitPrice, negotiated, discountPercent, lineTotal }]. Rows
+  /// from before T-22 have none ("[]") — their invoice had no wine.
+  wineLines         Json @default("[]")
   extras            Json
   customMessage     String
   locale            String
@@ -447,6 +450,11 @@ model Order {
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @default(now()) @updatedAt
   masterclassLines        OrderMasterclass[]
+  /// Wine for the table (T-22) — bottles added to this booking and charged on its invoice.
+  wineLines               WineOrderItem[]
+  /// Wine bought by this booking's guests for themselves (T-22 part 2): separate pickup wine orders linked to the visit,
+  /// never on its invoice.
+  guestPurchases          WineOrder[]        @relation("GuestPurchases")
   extras                  OrderExtra[]
   payments                Payment[]
   orderEvents             OrderEvent[]
@@ -528,6 +536,17 @@ enum OrderEventType {
   DELIVERY_FEE_SET
   // An admin changed a wine order's preferred delivery/pickup date (T-14). Payload: from / to.
   PREFERRED_DATE_CHANGED
+  // Add-on lines (T-7, Plan-AddOnsAndWine §4.8). Written by the new code only; nothing in the app reads events as a
+  // list yet, so an old build seeing these values on the shared dev database does no harm.
+  ADDON_ADDED
+  ADDON_REMOVED
+  // A per-person line followed a change of paying guests (D-11). Payload: lines [{ name, from, to }].
+  ADDON_QTY_SYNCED
+  // Wine for the table on a booking (T-22). Payload: wine, year, quantity, amount.
+  WINE_ADDED
+  WINE_REMOVED
+  // "Record guest purchase" created a pickup wine order linked to this visit. Payload: wineOrderId, customer, amount.
+  GUEST_PURCHASE_LINKED
 }
 
 enum ActorType {
@@ -570,32 +589,85 @@ model MenuItem {
   @@index([tenantId])
 }
 
+/// An add-on a guest can add to a booking (T-7, vault/Plan-AddOnsAndWine.md). Still called MasterclassItem in
+/// the code and the database — "Masterclass" is now just the first GROUP of add-ons; the admin screens and the
+/// public form say "Add-ons". Renaming the model would touch ~25 files for no user-visible gain, so it waits.
 model MasterclassItem {
   id           String             @id @default(cuid())
   name         String
+  /// Georgian name; null → the English name is shown (Plan-AddOnsAndWine D-2).
+  nameKa       String?
   unitType     MasterclassUnit    @default(PER_PIECE)
   pricePerUnit Int
   active       Boolean            @default(true)
   sortOrder    Int                @default(0)
   tenantId     String?
+  /// Which group it belongs to. Null only for an item that predates the groups and has no tenant to
+  /// give one to; every screen treats a groupless item as "ungrouped".
+  groupId      String?
+  group        AddOnGroup?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
   createdAt    DateTime           @default(now())
   orderLines   OrderMasterclass[]
 
   @@index([tenantId])
+  @@index([groupId])
 }
 
+/// A group of add-ons — "Masterclass", "Food", … (T-7). The admin decides who sees the group (companies,
+/// individuals) and for which visit types; each group is one row on the booking form.
+model AddOnGroup {
+  id                String            @id @default(cuid())
+  tenantId          String
+  /// ITEMS = a group of add-on items. WINE = the one "Wine for the table" row (T-22): its contents are the winery's bookable
+  /// wines, not items — the group only carries its name, who sees it, which visits and its place in the order. At most one
+  /// per winery (partial unique index in the migration).
+  kind              AddOnGroupKind    @default(ITEMS)
+  nameEn            String
+  /// Georgian name; null → the English name is shown.
+  nameKa            String?
+  showToCompanies   Boolean           @default(true)
+  showToIndividuals Boolean           @default(false)
+  /// Visit types this group is offered on. EMPTY = every visit type (Plan-AddOnsAndWine D-4 / D-22).
+  visitTypes        VisitType[]
+  active            Boolean           @default(true)
+  sortOrder         Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @default(now()) @updatedAt
+  items             MasterclassItem[]
+  orderLines        OrderMasterclass[]
+
+  @@index([tenantId])
+}
+
+enum AddOnGroupKind {
+  ITEMS
+  WINE
+}
+
+/// One add-on on one booking. The line is a SNAPSHOT: name, unit and group are copied onto it when it is added,
+/// so renaming or deleting the item or the group later never changes what an invoice said (Plan-AddOnsAndWine
+/// E5, KnownBugs #94). The item link is only a link — it goes null if the item is deleted.
 model OrderMasterclass {
-  id                String          @id @default(cuid())
-  orderId           String
-  masterclassItemId String
-  quantity          Int
-  pricePerUnit      Int // price snapshot at time of booking
+  id                  String           @id @default(cuid())
+  orderId             String
+  masterclassItemId   String?
+  quantity            Int
+  pricePerUnit        Int // price snapshot at time of booking
+  // Null only on a line that nothing has re-saved since the T-7 migration backfilled them — readers fall back to
+  // the item's own fields. New lines always carry all of them.
+  nameSnapshot        String?
+  nameKaSnapshot      String?
+  unitSnapshot        MasterclassUnit?
+  groupId             String?
+  group               AddOnGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupNameSnapshot   String?
+  groupNameKaSnapshot String?
   // Line tables carried no timestamps at all until 2026-09-18, so "when was this
   // added to the order" was unanswerable — and admins do add lines days after a
   // booking is made.
-  createdAt         DateTime        @default(now())
-  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  masterclassItem   MasterclassItem @relation(fields: [masterclassItemId], references: [id])
+  createdAt           DateTime         @default(now())
+  order               Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  masterclassItem     MasterclassItem? @relation(fields: [masterclassItemId], references: [id], onDelete: SetNull)
 }
 
 model OrderExtra {
@@ -677,6 +749,10 @@ model WineOrder {
   /// taken on the business-shaped form. An INDIVIDUAL order has no company, and its
   /// `businessName` holds the person's name so every list keeps something to show.
   customerType       BookingType    @default(COMPANY)
+  /// T-22 part 2 — the visit this order came out of ("Record guest purchase"): a guest of a booking bought wine for
+  /// themselves. A link only; SET NULL if the booking is deleted. Never touches the booking's total or invoice.
+  sourceOrderId      String?
+  sourceOrder        Order?         @relation("GuestPurchases", fields: [sourceOrderId], references: [id], onDelete: SetNull)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @default(now()) @updatedAt
   wineItems       WineOrderItem[]
@@ -694,6 +770,8 @@ model WineOrder {
   @@index([tenantId, abandonedAt])
   // The Wine Orders calendar groups by this (T-14, Plan-WineOrderFeatures Chunk 8).
   @@index([tenantId, preferredDate])
+  // "Sales from this visit" (T-22).
+  @@index([tenantId, sourceOrderId])
 }
 
 /// One attempt to pay for an Order or a WineOrder through a payment gateway.
@@ -862,6 +940,9 @@ model WineVintage {
   sparkling    Boolean?
   alcoholLevel Float?
   wine         Wine            @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  /// Offered as wine for the table on bookings (T-22). One flag per vintage; on a PRODUCT-level winery the admin switch sets
+  /// all of a wine's vintages together.
+  bookable     Boolean         @default(false)
   orderItems   WineOrderItem[]
   companyPrices CompanyWinePrice[]
 
@@ -869,17 +950,33 @@ model WineVintage {
   @@index([wineId])
 }
 
+/// One line of wine SOLD. Belongs to a wine order (wineOrderId) OR to a booking (orderId — wine for the table, T-22,
+/// vault/Plan-AddOnsAndWine.md), exactly one (CHECK in the migration). One table of wine sold, whatever the source
+/// (Max, D-6/D-7): statistics read `lineTotal`, never `priceSnapshot × quantity` again.
 model WineOrderItem {
   id                  String       @id @default(cuid())
-  wineOrderId         String
+  wineOrderId         String?
+  /// Wine for the table on a booking. Cascades with the booking.
+  orderId             String?
   wineVintageId       String?
   wineNameSnapshot    String
   vintageYearSnapshot Int
+  /// Per bottle BEFORE this line's % — the negotiated price when `negotiated`, else the standard price.
   priceSnapshot       Int
   quantity            Int
+  /// True when the company's agreed price replaced the standard one (no % on top).
+  negotiated          Boolean      @default(false)
+  /// The % taken off THIS line (null = none). Standard lines of a discounted company only.
+  discountPercent     Float?
+  /// Tetri actually charged for this line, rounded per line (C-1). Null only on a row nothing has written since the
+  /// T-22 migration backfilled every existing line — readers fall back to quantity × priceSnapshot less the order's %.
+  lineTotal           Int?
   createdAt           DateTime     @default(now())
-  wineOrder           WineOrder    @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  wineOrder           WineOrder?   @relation(fields: [wineOrderId], references: [id], onDelete: Cascade)
+  order               Order?       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   wineVintage         WineVintage? @relation(fields: [wineVintageId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
 }
 
 /// A bug report or feature request submitted via the floating report widget on

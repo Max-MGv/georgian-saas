@@ -20,6 +20,7 @@
  */
 import type { Prisma, PrismaClient, BookingStage, WineOrderStage, BookingType, VisitType, MasterclassUnit } from '@prisma/client'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type Counts } from '@/lib/pricingUtils'
+import { sumQuantityLines } from '@/lib/orderLines'
 import { fromMajor } from '@/lib/money'
 
 export const DEMO_SLUG = 'vineworks-demo'
@@ -320,10 +321,10 @@ const WINE_ORDER_COUNT = 45
  */
 type SeedPrice = { total: number; rates: { tastingOnly: number | null; lunchOnly: number | null; tastingLunch: number | null; registration: number } }
 
-function computeTotal(tiers: TierSpec[], counts: Counts, masterclassAmt: number): SeedPrice | null {
+function computeTotal(tiers: TierSpec[], counts: Counts, masterclassAmt: number, wineAmt = 0): SeedPrice | null {
   const rates = ratesForCounts(tiers.map(tierToTetri), counts, 0) // no seeded company has a registration fee
   if (payingGuests(counts) === 0 || notOffered(rates, counts).length > 0) return null
-  return { total: priceCounts(rates, counts, { masterclass: masterclassAmt, extras: 0 }), rates }
+  return { total: priceCounts(rates, counts, { masterclass: masterclassAmt, extras: 0, wine: wineAmt }), rates }
 }
 
 /** Does this company's table offer Lunch only at all (D-7)? */
@@ -531,6 +532,7 @@ export async function seedDemoTenant(
   await db.company.deleteMany({ where: { tenantId: tid } })
   await db.menuItem.deleteMany({ where: { tenantId: tid } })
   await db.masterclassItem.deleteMany({ where: { tenantId: tid } })
+  await db.addOnGroup.deleteMany({ where: { tenantId: tid } }) // after its items (the item → group FK is RESTRICT)
 
   // Every tenant has exactly these two system roles, seeded once
   // (Plan-ContactRoles Chunk 0/1) and never deleted by this reseed — the wipe
@@ -657,10 +659,25 @@ export async function seedDemoTenant(
   await db.menuItem.createMany({
     data: MENU_ITEMS.map((m, i) => ({ ...m, tenantId: tid, active: true, sortOrder: i })),
   })
+  const mcGroup = await db.addOnGroup.create({
+    data: { tenantId: tid, nameEn: 'Masterclass', nameKa: 'მასტერკლასი', showToCompanies: true, showToIndividuals: false, sortOrder: 0 },
+  })
   await db.masterclassItem.createMany({
-    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, pricePerUnit: fromMajor(m.pricePerUnit), tenantId: tid, active: true, sortOrder: i })),
+    data: MASTERCLASS_ITEMS.map((m, i) => ({ ...m, pricePerUnit: fromMajor(m.pricePerUnit), tenantId: tid, groupId: mcGroup.id, active: true, sortOrder: i })),
   })
   const mcItems = await db.masterclassItem.findMany({ where: { tenantId: tid } })
+  // Wine for the table (T-22): the first three wines are offered on bookings, in the winery's own "Wine for the table" group, and
+  // roughly one booking in six has some. Chosen from the loop position — NOT from rng() — so the rest of the demo data stays
+  // exactly as it was seeded before this existed.
+  const tableVintages = await db.wineVintage.findMany({
+    where: { tenantId: tid, active: true }, include: { wine: true }, orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }], take: 3,
+  })
+  if (tableVintages.length > 0) {
+    await db.wineVintage.updateMany({ where: { id: { in: tableVintages.map(v => v.id) } }, data: { bookable: true } })
+    await db.addOnGroup.create({
+      data: { tenantId: tid, kind: 'WINE', nameEn: 'Wine for the table', nameKa: 'ღვინო მაგიდისთვის', showToCompanies: true, showToIndividuals: true, sortOrder: 50 },
+    })
+  }
   const vegItems = MENU_ITEMS.filter(m => m.type === 'VEGETABLE').map(m => m.name)
   const meatItems = MENU_ITEMS.filter(m => m.type === 'MEAT').map(m => m.name)
 
@@ -717,7 +734,7 @@ export async function seedDemoTenant(
 
       // ~1 in 5 bookings adds a masterclass, so the order-detail expansion
       // isn't empty either.
-      const mcLines: { masterclassItemId: string; quantity: number; pricePerUnit: number }[] = []
+      const mcLines: Prisma.OrderMasterclassUncheckedCreateWithoutOrderInput[] = []
       let masterclassAmt = 0
       if (rng() < 0.2 && mcItems.length) {
         const item = pick(mcItems)
@@ -725,11 +742,27 @@ export async function seedDemoTenant(
         const qty = item.unitType === 'FLAT' ? 1
           : item.unitType === 'PER_PERSON' ? payingGuests(counts)
           : rand(10, 40)
-        mcLines.push({ masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit })
-        masterclassAmt = qty * item.pricePerUnit
+        mcLines.push({
+          masterclassItemId: item.id, quantity: qty, pricePerUnit: item.pricePerUnit,
+          nameSnapshot: item.name, nameKaSnapshot: item.nameKa, unitSnapshot: item.unitType,
+          groupId: mcGroup.id, groupNameSnapshot: mcGroup.nameEn, groupNameKaSnapshot: mcGroup.nameKa,
+        })
+        masterclassAmt = sumQuantityLines(mcLines)
       }
 
-      const priced = computeTotal(tiers, counts, masterclassAmt)
+      // Table wine: website price, no company terms (the demo companies have none on bookings). Each line rounded on its own.
+      const tableWineLines: Prisma.WineOrderItemUncheckedCreateWithoutOrderInput[] = []
+      if (tableVintages.length > 0 && (y * 12 + m + i) % 6 === 0) {
+        const v = tableVintages[(i + m) % tableVintages.length]
+        const quantity = 2 + (i % 5)
+        tableWineLines.push({
+          wineVintageId: v.id, wineNameSnapshot: v.wine.name, vintageYearSnapshot: v.year,
+          priceSnapshot: v.price, quantity, lineTotal: quantity * v.price,
+        })
+      }
+      const tableWineAmt = tableWineLines.reduce((s, l) => s + (l.lineTotal ?? 0), 0)
+
+      const priced = computeTotal(tiers, counts, masterclassAmt, tableWineAmt)
       const totalPrice = priced?.total ?? null
 
       // Rolled BEFORE the stage, because an abandoned checkout is a slice of
@@ -803,6 +836,7 @@ export async function seedDemoTenant(
           registrationFeeSnapshot: priced?.rates.registration ?? null,
           ...dates,
           masterclassLines: mcLines.length ? { create: mcLines } : undefined,
+          wineLines: tableWineLines.length ? { create: tableWineLines } : undefined,
           contacts: contactRows.length ? { create: contactRows } : undefined,
       }
       orderWrites.push(() => db.order.create({ data: orderData }))
@@ -831,15 +865,20 @@ export async function seedDemoTenant(
         const v = pick(vintages)
         if (!chosen.some(c => c.id === v.id)) chosen.push(v)
       }
-      const items = chosen.map(v => ({
-        wineVintageId: v.id,
-        wineNameSnapshot: v.wine.name,
-        vintageYearSnapshot: v.year,
-        priceSnapshot: v.price,
-        quantity: pick([12, 24, 36, 48, 60, 72, 96, 120]),
-      }))
-      const gross = items.reduce((s, it) => s + it.quantity * it.priceSnapshot, 0)
-      const totalAmount = Math.round(gross * (1 - buyer.discount / 100))
+      // Each line carries what it cost, rounded on its own (T-22 / C-1); the order's total is their sum.
+      const items = chosen.map(v => {
+        const quantity = pick([12, 24, 36, 48, 60, 72, 96, 120])
+        return {
+          wineVintageId: v.id,
+          wineNameSnapshot: v.wine.name,
+          vintageYearSnapshot: v.year,
+          priceSnapshot: v.price,
+          quantity,
+          discountPercent: buyer.discount > 0 ? buyer.discount : null,
+          lineTotal: Math.round(quantity * v.price * (1 - buyer.discount / 100)),
+        }
+      })
+      const totalAmount = items.reduce((s, it) => s + it.lineTotal, 0)
       const isAbandoned = rng() < 0.08
       const stage: WineOrderStage = isAbandoned
         ? 'NEW'

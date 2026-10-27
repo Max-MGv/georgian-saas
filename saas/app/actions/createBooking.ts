@@ -5,12 +5,15 @@ import { writeOrderContacts } from '@/lib/orderContacts'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { asTetri } from '@/lib/money'
 import { BookingType, VisitType } from '@prisma/client'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { sendBookingConfirmation } from '@/lib/emails/bookingConfirmation'
 import { sendNewBookingNotification } from '@/lib/emails/newBookingNotification'
 import { resolveTenantTheme } from '@/lib/themePresets'
 import { boxColumns, countsFromVisit, notOffered, payingGuests, priceCounts, ratesForCounts, totalGuests, type BookingVisitType, type Product, type ProductRates } from '@/lib/pricingUtils'
-import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, type CountRuleKey } from '@/lib/bookingInput'
+import { sumQuantityLines } from '@/lib/orderLines'
+import { groupShownOn } from '@/lib/addOns'
+import { priceTableWine, type TableWineRow } from '@/lib/tableWine'
+import { checkBookingCounts, checkMasterclassLines, COUNT_RULE_KEYS, countRulesFromSettings, hotDishWithoutLunch, MASTERCLASS_CATALOGUE_SELECT, type CountRuleKey } from '@/lib/bookingInput'
 import { getSetting } from '@/app/actions/settings'
 import { getContent } from '@/app/actions/siteContent'
 import { t } from '@/lib/t'
@@ -83,6 +86,8 @@ export type BookingFormData = {
   foodNotes?: string | null
   /** pricePerUnit is ignored — the server reads every price from its own catalogue (#93). */
   masterclassLines?: { masterclassItemId: string; quantity: number; pricePerUnit?: number }[]
+  /** Wine for the table (T-22): bottles of wines the winery switched on for bookings. Names and prices are read from the database; a company's terms only once its code is proven. */
+  wineLines?: { vintageId: string; quantity: number }[]
   /**
    * ISO 3166-1 alpha-2 codes for the nationalities present on a COMPANY booking
    * (Plan-CompanyNationality) — a small tag set, no per-country headcount.
@@ -266,18 +271,41 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
       return { success: false, error: await mc('onsite_err_hot_dish', 'form.err_hot_dish') }
     }
 
-    // ── Masterclass lines (#93): this tenant's items, active, whole quantities, FLAT = 1, price from the DB ──
-    // Offered on the detailed company form only, as before; anything sent from another layout is ignored.
-    const catalogue = layout === 'boxes' && (data.masterclassLines ?? []).length > 0
+    // ── Add-on lines (#93, T-7): this tenant's items, active, in a group offered to this kind of guest on this visit
+    // type; per person = the paying guests, FLAT = 1, a typed quantity whole 1…999; price from the DB ──
+    // Any form can send them now (the groups decide who is offered what); before T-7 only the detailed company form did.
+    const catalogue = (data.masterclassLines ?? []).length > 0
       ? await withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
-          where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true },
+          where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT,
         }))
       : []
-    const checkedLines = checkMasterclassLines(layout === 'boxes' ? data.masterclassLines : undefined, catalogue)
+    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue, {
+      payingGuests: effectiveGuestCount,
+      shownOn: { bookingType: data.bookingType, visitType },
+    })
     if (!checkedLines.ok) return { success: false, error: await mc('onsite_err_masterclass', 'form.err_masterclass') }
     const masterclassLines = checkedLines.lines
-    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-    const lines = { masterclass: masterclassAmt, extras: 0 }
+    const masterclassAmt = sumQuantityLines(masterclassLines)
+
+    // ── Wine for the table (T-22): the winery's bookable wines, priced by lib/tableWine.ts — the same rules as a wine order.
+    // A company's terms (its agreed prices and % off) apply ONLY once the company is proven by its code, below; an
+    // individual, or a company merely named, pays the website price. The group must be switched on and offered to this guest.
+    let wineRows: TableWineRow[] = []
+    let wineAmt = 0
+    const priceWine = async (termsCompanyId: string | null): Promise<string | null> => {
+      if ((data.wineLines ?? []).length === 0) return null
+      const unavailable = await mc('onsite_err_wine', 'form.err_wine')
+      const wineOn = (await headers()).get('x-tenant-modules-wine-orders') === 'true'
+      if (!wineOn) return unavailable
+      const group = await withTenantDb(tenantId, tx => tx.addOnGroup.findFirst({ where: { tenantId, kind: 'WINE', active: true } }))
+      if (!group || !groupShownOn(group, data.bookingType, visitType)) return unavailable
+      const priced = await withTenantDb(tenantId, tx => priceTableWine(tx, tenantId, { lines: data.wineLines, termsCompanyId, locale: guestLocale }))
+      if (!priced.ok) return unavailable
+      wineRows = priced.rows
+      wineAmt = priced.total
+      return null
+    }
+    const linesNow = () => ({ masterclass: masterclassAmt, extras: 0, wine: wineAmt })
 
     // ── Price (Plan-PricingModel §4.2): each product looks up its own row by its own count (D-2) ──
     // A product with guests that the ladder does not offer is refused — never priced at ₾0 (D-7).
@@ -290,6 +318,12 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
     let totalPrice = masterclassAmt
     const isNewCompanyRequest = data.bookingType === 'COMPANY' && !data.companyId
 
+    if (data.bookingType === 'INDIVIDUAL' || !data.companyId) {
+      // An individual, or a company that is only being requested (no company chosen yet): website wine prices.
+      const wineError = await priceWine(null)
+      if (wineError) return { success: false, error: wineError }
+    }
+
     if (data.bookingType === 'INDIVIDUAL') {
       // Registration is never charged on the individual path.
       const individualsCompany = await withTenantDb(tenantId, tx =>
@@ -299,9 +333,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         rates = ratesForCounts(individualsCompany.prices, counts, 0)
         const missing = notOffered(rates, counts)
         if (missing.length) return await notOfferedError(missing)
-        totalPrice = priceCounts(rates, counts, lines)
-      } else {
-        totalPrice = 0 // no pricing configured: the winery confirms the price by hand, as before
+        totalPrice = priceCounts(rates, counts, linesNow())
       }
     } else if (data.companyId) {
       // The browser names the company; the server decides whether this guest may book as it.
@@ -319,13 +351,19 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
         return { success: false, error: await mc('onsite_access_code_error', 'form.access_code_error') }
       }
       const company = checked.company
+      // Proven: this company's agreed wine prices and % apply to the wine it added.
+      const wineError = await priceWine(company.id)
+      if (wineError) return { success: false, error: wineError }
       if (company.prices.length) {
         rates = ratesForCounts(company.prices, counts, company.registrationFee)
         const missing = notOffered(rates, counts)
         if (missing.length) return await notOfferedError(missing)
-        totalPrice = priceCounts(rates, counts, lines)
+        totalPrice = priceCounts(rates, counts, linesNow())
       }
     }
+    // No price table / no pricing configured: the winery confirms the visit price by hand, as before. What the guest chose
+    // (add-ons, wine) is already priced, so it is the total until then.
+    if (!rates) totalPrice = masterclassAmt + wineAmt
 
     const createdOrder = await withTenantDb(tenantId, async tx => {
       const created = await tx.order.create({
@@ -361,6 +399,7 @@ export async function createBooking(data: BookingFormData): Promise<BookingResul
           ? Array.from(new Set((data.nationalities ?? []).filter(code => VALID_COUNTRY_CODES.has(code))))
           : [],
         masterclassLines: masterclassLines.length > 0 ? { create: masterclassLines } : undefined,
+        wineLines: wineRows.length > 0 ? { create: wineRows } : undefined,
       },
     })
       /**

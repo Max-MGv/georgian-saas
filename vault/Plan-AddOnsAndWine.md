@@ -1,11 +1,126 @@
 ---
 tags: [plan, booking, wine, add-ons]
-status: 📋 Plan complete — awaiting Max's review of the summary; nothing built
+status: 📋 Plan re-based on the three-product pricing model 2026-10-24 — awaiting Max's answers (§0b); nothing built
 tickets: T-7, T-22
 ---
 
 # Plan — Booking add-ons (T-7) + wine on bookings (T-22)
 
+## 0. Update 2026-10-24 — what changed since 19 Oct (read this before the rest)
+
+T-7 and T-22 went to **In progress** on 2026-10-24. Since this plan was written, **T-152 (three products) is on
+production** (`Plan-PricingModel.md`, D-1…D-17) and T-215 rebuilt the order page. The plan below is still right
+about *what* to build; these are the places where its *wording* no longer matches the code. **Read every
+"visit type", "per person" and `priceBooking` below through this table.**
+
+| Plan says | Code / decision today | Effect on this plan |
+|---|---|---|
+| Visit types "tasting / tasting + lunch" (D-4, `AddOnGroup.visitTypes`) | `VisitType` = `TASTING` · `TASTING_LUNCH` · **`LUNCH`** (company simple form, shown as "Lunch"). Companies' detailed form has 3 product boxes + Free. | `AddOnGroup.visitTypes` takes all three values (empty = all). A group limited to "Tasting + Lunch" does **not** show on a Lunch-only visit — see **Q-A**. |
+| "Per person" = all paying guests (D-11 / C-3), "tasting + lunch on detailed bookings, else guest count" | Paying guests = Tasting + Lunch + Tasting & Lunch (`payingGuests(counts)`, `lib/pricingUtils.ts:79`); Free guests never pay. The admin screens already pre-fill a PER_PERSON line with that number (`NewOrderForm.tsx:215`, `OrderDetail.tsx:926`) but store a fixed quantity — it does **not** follow later guest changes today. | C-3 stays "all paying guests", now = the three boxes. "Follow automatically" (D-11) is therefore **new behaviour**, not a fix. A masterclass for only one product's guests = a per-piece item. |
+| `priceBooking({ addOns, wine, extras })` (§4.5) | `priceBooking` is gone. Pricing is `priceCounts(rates, counts, lines: { masterclass, extras })` (`pricingUtils.ts:183`), `adminQuote()` for the admin screens, `lib/adminOrderView.ts` for what they show. Add-on lines are checked by `checkMasterclassLines()` (`lib/bookingInput.ts:250`) — #93 is **fixed**. | `LineTotals` becomes `{ addOns, wine, extras }`; `checkMasterclassLines` becomes `checkAddOnLines`. Same plan, new names. |
+| "Line sums hand-written in ~10 places" | Still true, plus `adminOrderView.ts:127` and `lib/demoSeed.ts:726` — **re-count in Chunk 0** (grep `masterclass` + `extras` in `lib/` and `app/`). | Chunk 0 unchanged. |
+| E1 "company with no price tier" | A-9: admins type three rates; `adminQuote` returns `unpriced` when nothing is typed. | Same outcome — confirm in Chunk 0 that add-ons on an `unpriced` order stay the only stored total. |
+| Order page / New Order screens (§5) | T-215: click-to-edit order page (`1a34c4e`), mirrors the public form (Plan-OrderPageMirror). | Chunk 6 builds the add-on / wine cards **on the new order page**; the 19 Oct mockup (A) shows the old layout. Rule 12: re-check the screen against its siblings first. |
+| KnownBugs #93 "fixed separately first" | Fixed by T-152 (Chunks 7–8). | Chunk 0 first bullet is done. |
+
+### 0a. Review before building (ClaudeInstructions Rule 12) — 2026-10-24
+
+Refreshed mockup on today's order page: `vault/addons-order-page.html` → https://claude.ai/artifact/PDr9prJjGNtC2uxVYZyJ4B
+(interactive: pencil → draft → Save/Cancel; guests card drives per-person lines). Gap list G-1…G-8:
+
+- **G-1 (needs Max):** only the detailed company form shows masterclass today; individuals and the simple company form see
+  nothing. Proposal: every form shows each group the admin ticked for that audience. Recommended: yes.
+- **G-2 (customer-visible, release note):** public form today charges a per-person item × the quantity the guest typed
+  (default 1); flat items show a quantity box. New: per person × paying guests, flat has no box. Chunk 0 counts real
+  production lines first (read-only, Max's go).
+- **G-3:** order page — per-person quantity read-only, follows the guest card on Save, history event.
+- **G-4:** both new cards use T-215's pencil → draft → Save/Cancel; New Order keeps lines in the browser until Create.
+- **G-5:** wine add-line = wine → vintage → qty like New Wine Order, price reason shown; public form uses the +/− list.
+- **G-6:** empty states link to Add-ons admin / Wines; empty values "—".
+- **G-7:** Orders list — column id `masterclass` kept (saved in browsers), renamed Add-ons; new Table wine column; print sheet lists both.
+- **G-8:** content-editor booking-form preview mirrors the group rows (MaintenanceNotes §1).
+- Layout change inside the card: the Unit column folds into the item's second line so the table fits a 390 px phone
+  (to be checked on the real page in Chunk 6 QA).
+
+### 0c. Build log (localhost only until Max says "push to staging"; nothing on staging or production)
+
+Max, 2026-10-24: *"build it on localhost, I'll tell you what to change before we push to staging."* Dev server for it:
+`saas-3100` entry in `C:\Users\Max\.claude\launch.json` (port 3000 is the MaxFinances app). Build order changed from §7 to
+show screens early: **Part A = add-ons (T-7) end to end, then Part B = wine (T-22)**. Model names are NOT renamed
+(`MasterclassItem` / `OrderMasterclass` stay in code; screens say Add-ons) — saves touching ~25 files for no visible gain.
+
+- ✅ **Chunk 0** `657f5c2` — `lib/orderLines.ts`: every hand-written line sum goes through it (14 copies). tsc 0, pricing tests 123/123.
+- ✅ **Chunk 1 (Part A)** `dea57c3` — migration `20261024200000_addon_groups` on the **dev DB**: `AddOnGroup` (RLS), item `groupId`/`nameKa`,
+  line snapshots, item FK RESTRICT → SET NULL (#94 fixed). Backfill: one "Masterclass" group per winery with items; 172 lines
+  snapshotted, ₾36,000 line total unchanged. `test-ordermasterclass-rls` 14/14. Not yet on production.
+- ✅ **Chunk 3 (admin page)** — `/admin/add-ons` (old `/admin/masterclass` redirects): groups with EN/KA names, who sees them
+  (companies / individuals), visit types (Tasting · Tasting + Lunch · Lunch, all three = "every type"), items with KA name,
+  move-to-group for ungrouped items. Verified in the browser pane: create group, edit group, add item.
+- ✅ **Chunk 5 (public form, add-ons)** `242617b` — group rows on every form, per person × paying guests, flat once, server re-checks
+  visibility + forces quantities. QA `tests/_qa/addons-public.spec.ts` 5/5.
+- ✅ **Chunk 6a (order page + New Order, add-ons)** `a566a76` — grouped Add-ons card, per-person follows guests (`lib/addOnLines.ts`),
+  history events (migration `20261025090000_addon_events`). QA `tests/_qa/addons-admin.spec.ts` 4/4 (incl. New Order UI).
+- ✅ **Chunk 7 (invoices, add-ons)** `c1fe565` + `3504cc6` — per-group sections on print + email, staff sheet column, content-editor mirror, specs updated.
+- ✅ **PART A (T-7) COMPLETE on localhost** — nothing pushed.
+- ✅ **Part B schema** `e793d77` — migrations `20261025120000_wine_on_bookings` + `20261025120100_wine_events` on the dev DB: `WineVintage.bookable`,
+  `WineOrderItem` booking parent (`orderId`, CHECK one parent) + `negotiated/discountPercent/lineTotal` (all 256 existing lines backfilled, each
+  order's lines add up to its stored total), `WineOrder.sourceOrderId`, `AddOnGroup.kind` (+ one WINE group per winery), RLS through Order.
+  `priceWineOrder` rounds per line (C-1). `test-wine-pricing` 24/24, `test-wineorderitem-rls` 15/15.
+- ✅ **Part B admin + server** `23aa133` (+ migration `20261025123000_invoice_sent_wine_lines`): "On bookings" switch on Wines (`setWineBookable` /
+  `setVintageBookable`, creates the group via `lib/wineGroup.ts`), wine group card on Add-ons (no items, count, can't delete), company wine
+  terms section also for booking companies, `lib/tableWine.ts` (ONE pricing function for every write path), `createBooking` + `createOrderAdmin`
+  store wine, `app/actions/orderWine.ts` (add/update/remove + events), all re-pricing paths include wine (`LineTotals.wine`), order page
+  "Wine for the table" card (draft until Save), New Order wine card, invoice print + email + `InvoiceSent.wineLines`.
+- ✅ **Public booking form wine row** `7be4e8c` — one collapsible "Wine for the table" row (+/- per bottle), website price for individuals, a company's agreed
+  price / % only after its code is proved, review rows + totals. QA `tests/_qa/wine-public.spec.ts` 4/4 (incl. forged / unbookable / negative quantity refused).
+- ✅ **Orders list / CSV / staff sheet** `841fc7f` — Add-ons + Table wine columns (hidden for demo), CSV "Add-ons (GEL)" + "Table wine (GEL)", staff sheet lists both.
+- ✅ **Wine statistics** `61a8c3b` — `lib/wineSales.ts` is the only reader of wine sold (sources `order` / `guest` / `table`), **Where it was sold** filter, grouped by
+  vintage id, revenue = each line's own amount (**fixes KnownBugs #95**).
+- ✅ **Guest purchases** `b517b4b` — order page "Sales from this visit" (dashed card, "not on the invoice", + Record guest purchase) creates a pickup wine order
+  through `createWineOrderAdmin({ sourceOrderId })` (INDIVIDUAL, website price, phone optional, `GUEST_PURCHASE_LINKED` event); wine-orders list shows
+  "From the visit of <date> · <company>" linking back; the booking total/invoice never change. QA `tests/_qa/guest-sales.spec.ts` 4/4.
+- ✅ **Booking revenue 3-level switch** `3687355` — `lib/revenueLevel.ts`: visit only · + wine for the table · + guest purchases on the Orders revenue strip (`?rev=`)
+  and booking statistics; default = the invoiced total so no existing number moves; only shows once a booking has wine around it.
+- ⏭ **STILL TO DO before hand-over:** demo seed table wine, onboarding wizard copy (T-7 step name), an edge-case pass (390px phone, wine module off, deactivated
+  wine, paid-order balance with wine), remaining committed Playwright specs that mention masterclass names, `tix review` cards on T-7 / T-22 (Max tests on
+  localhost:3100 first), release-note draft WITH screenshots (do it when it is on staging — Georgian wording is Claude's, flag it). **Open questions for Max:** G-1
+  (simple-form companies see add-on rows — built as "yes"); what "i uploaded 2" meant (nothing found on disk).
+
+**Resume checklist for a fresh session:** (1) `cd georgian-saas && git status` — branch `staging`, ~12 local commits unpushed, NEVER push without Max's go;
+(2) dev server: `preview_start saas-3100` (entry lives in `C:\Users\Max\.claude\launch.json`, port 3100 — 3000 is MaxFinances); it is STOPPED now;
+stop it before any `prisma generate`; (3) run `cd saas && npx tsc --noEmit`, `node node_modules/tsx/dist/cli.mjs scripts/test-pricing-model.ts` (152),
+`scripts/test-wine-pricing.ts` (24), `scripts/test-wineorderitem-rls.ts` (15), `scripts/test-ordermasterclass-rls.ts` (14), `scripts/check-i18n-parity.ts`;
+(4) QA specs run with `npx playwright test -c tests/_qa/playwright.qa3100.config.ts <spec> --workers=1`; (5) dev-DB state: groups Masterclass + Food (Food:
+companies + individuals, not Lunch), item "Extra khachapuri" is ACTIVE (staging old code would show it inside the Masterclass row — switch it off
+before Max looks at staging); no bookable wines yet (switch one on in Admin → Wines to see wine for the table).
+**Gotchas:** files here have CRLF — multi-line `node -e` string patches silently miss (use the Edit tool or normalise newlines); never put backticks/`$` in
+PowerShell/bash heredoc code (JSX template literals got eaten — write files with the Write tool); `git commit -m @'…'@` breaks on embedded double quotes
+— use `git commit -F <file>`; `tsc` is the safety net (LineTotals.wine / lineTotals({wineLines}) are required on purpose).
+
+### 0b. Questions for Max — ✅ ALL ANSWERED 2026-10-24: "all as recommended"
+
+C-1…C-5 and Q-A are **decided as recommended** below (they are now decisions D-17…D-22). Text kept for the record.
+
+| # | Decision (Max, 2026-10-24) |
+|---|---|
+| D-17 = C-1 | Wine orders switch to per-line rounding too. |
+| D-18 = C-2 | A company that is both booking + wine company shares one set of wine terms. |
+| D-19 = C-3 | "Per person" = all paying guests (the three boxes, never Free); partial-group items = per piece. |
+| D-20 = C-4 | Phone optional on guest-purchase pickup orders. |
+| D-21 = C-5 | Print booking sheet lists add-ons + table wine. |
+| D-22 = Q-A | Visit-type choices per group: Tasting · Tasting + Lunch · Lunch (own tick box, default ticked wherever Tasting + Lunch is). |
+
+Original wording:
+
+- **C-1** Wine orders also round per line (so table wine and wine orders calculate alike; totals may move ≤ 1 tetri per line, past orders unchanged). *Recommend: yes.*
+- **C-2** A company ticked as **both** booking and wine-order company shares one set of wine terms. *Recommend: yes — simplest; split later if a winery asks.*
+- **C-3** "Per person" = all paying guests (the three boxes, not Free); a masterclass for only some guests = a "per piece" item. *Recommend: yes.*
+- **C-4** Phone number optional when staff record a guest purchase. *Recommend: yes — these are people standing at the winery.*
+- **C-5** The staff booking sheet (print) lists add-ons and table wine (it shows neither today). *Recommend: yes.*
+- **Q-A (new)** A group limited to a visit type: should "Tasting + Lunch" groups show on a **Lunch** visit? Lunch follows the Tasting + Lunch rules for lead time / hot dish (A-5 of the pricing plan). *Recommend: yes — the group's visit-type choices stay "Tasting", "Tasting + Lunch" and "Lunch", and Lunch is its own tick box, default ticked wherever Tasting + Lunch is.*
+
+
+> **Status 2026-10-24: see §0 first** (re-based on the three-product pricing; T-7/T-22 now In progress).
 > **Status 2026-10-19:** design settled with Max over three rounds of questions, one blind review
 > and one round of mockups. **No code written. Nothing approved to build yet** — Max is reviewing
 > the summary page (`vault/addons-summary.html`). Chunks are strictly sequential; each one is
@@ -38,7 +153,7 @@ tickets: T-7, T-22
 | D-1 | Build T-7 and T-22 together? | Yes. |
 | D-2 | Group names translated? | Yes, EN + KA. Item names too (KA optional, falls back to EN). |
 | D-3 | Add-ons for individuals? | Yes — per group: companies and/or individuals. |
-| D-4 | Groups limited by visit type? | Yes — per group: tasting / tasting + lunch / both. |
+| D-4 | Groups limited by visit type? | Yes — per group, any of the visit types (Tasting / Tasting + Lunch / Lunch since T-152; empty = all). See §0 / Q-A. |
 | D-5 | Table-wine price | Website price by default. A **booking company** can have its own table-wine terms on the Companies tab: a % discount and/or agreed per-wine prices (the same mechanism wine-order companies already use). Max: booking companies and wine companies are separate entities. |
 | D-6 | Does table wine count as wine sold? | Yes — "they are indeed wine orders"; one system, the source differs. |
 | D-7 | Where is it stored? | In the one existing wine-line table; each line belongs to a wine order **or** a booking (§4.3). |
@@ -309,12 +424,36 @@ Strictly sequential. Every chunk: dev DB + localhost, verified (specs + screensh
   MaintenanceNotes §38, RLS-Architecture, FeatureLog, Feature note, SessionLog; Max tests on
   staging with a test checklist on T-7/T-22.
 
-**Chunk 12 — Production (each step on Max's go)**
-1. Read-only checks on Nikalas Marani; backup / restore point.
-2. `prisma migrate deploy` on production (additive — live code unaffected); totals audit = 0 diffs.
-3. Merge `staging` → `master`; verify on production (booking with add-ons + wine, invoice, stats).
-4. Publish release note.
-5. Later, separate: contract migration (`groupId` NOT NULL).
+**Chunk 12 — Production** — Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
+
+**Pre-flight + rehearsal — ✅ DONE 2026-10-27 (read-only on production; nothing written there)**
+- Backup `2026-10-27_101815_prod_t7-t22-preflight` (1,413 rows, 36 tables, `backup-verify` OK). Prod = master `dd90e93`; exactly the 5 T-7/T-22 migrations pending (prod has 39 applied, repo 44, nothing prod-only).
+- Live data that the migrations touch: **Nikalas Marani** 3 orders (1 masterclass line), 7 masterclass items, 5 wine orders / 5 wine lines; **demo tenant** the rest (393 orders, 73 masterclass lines, 45 wine orders / 109 lines). 0 `CompanyWinePrice` rows. No new wine orders without totals.
+- **Rehearsal on a local copy of that backup (PostgreSQL 17.6 port 54331, deleted afterwards):** restore PROOF OK → `prisma migrate deploy` (5 migrations) applied cleanly →
+  **every money fingerprint identical before/after** (Order 396 rows ₾233,732.00; WineOrder 50 rows ₾124,035.20; InvoiceSent, Payment, OrderMasterclass, WineOrderItem — `scripts/_qa/rehearsal-totals.ts`) →
+  `addons-expand-check` 0 problems (one "Masterclass" group per tenant, companies-only = today's behaviour, FK is SET NULL) → `wine-lines-check` 0 problems (all 114 lines have `lineTotal`, each order's lines = its stored total, ₾124,035.20) →
+  tenant isolation as `app_user` OK (Nikalas sees 1 group / 5 wine lines / 3 orders, an unknown tenant 0) → **demo seed ran cleanly with the new code** (388 bookings, 65 with table wine, 45 wine orders, wine group + 3 bookable wines).
+
+**Blind code review of the money paths (2026-10-27, fresh subagent, vault fenced off, read-only) — each finding checked against the code and the production backup:**
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | Order page keeps `lines` / `wineLines` / `extras` in `useState` and never re-syncs them from props after `router.refresh()` — after a guest-count save the server rewrites per-person quantities but the page total / balance / printed invoice use the stale line amounts until reload (`OrderDetail.tsx` ~895; my spec only asserted the DB) | **REAL, fix before production** (re-sync from props when no card is being edited; add a screen-level assertion) |
+| 2 | Per-person lines are forced to the paying guests on any re-price; legacy lines with a typed quantity get re-quantified | Prod impact **none**: Nikalas 0 mismatches; 4 demo lines (guestCount incl. free) are regenerated nightly. Semantics = D-19 (per person = paying guests; a partial group = per piece). Documented. |
+| 3 | Changing / assigning a booking's company does not re-price its wine lines (they keep the terms they were sold with) | **Decision for Max** (re-price vs frozen); prod impact none today (no table wine exists on prod until an admin switches a wine on) |
+| 4 | Individual booking with no Individuals price table now gets total = add-ons + wine (was 0) → online payment could charge only those | Cannot occur on prod (both tenants have an Individuals table, every booking company has prices). Earlier decision E1; note for future wineries. |
+| 5 | `wine_on_bookings` backfill treats every line of a discounted order as a standard line (cannot know a line was negotiated) | Moot on prod: **0 `CompanyWinePrice` rows**, so no negotiated line exists; the per-order sum check passes (rehearsal). |
+| 6 | Add-ons now show on every company form (migration group visible to companies, no layout gate) | No change on prod: `enable_enhanced_company_booking` is true for both tenants. |
+| 7 | Order-page print invoice drops the Georgian add-on / group names when the admin language is English | Real, minor — fixed with #1 |
+| 8 | Low: old code writing orphan lines/items in the migrate→merge window (re-check with `addons-expand-check --prod` right after the deploy); WINE-group id accepted as an item's group by a crafted ADMIN request; first-switch-on race; masked server-action errors; unbounded wine id list | Noted; none block. |
+Checked clean by the reviewer: tenant isolation + RLS, access-code gate for company terms, guest purchases never touch the booking total/invoice, no double counting in statistics, i18n keys.
+
+**Runbook (each step needs Max's go; all additive, so old code keeps working while the schema is ahead):**
+1. Re-check nothing changed on production since the backup (order/wine-order counts and `rehearsal-totals`-style fingerprint, read-only).
+2. `prisma migrate status` with the prod URLs set for that one command only (from `.env.prod.backup`) → must list ONLY the 5 → `prisma migrate deploy` → `addons-expand-check --prod` and `wine-lines-check --prod` = 0 problems. (No expand-only config needed: there is no contract step in this release.)
+3. Merge `staging` → `master`, push (separate commands: merge, push) → Vercel READY on the production domains; note the rollback target (the previous production deployment).
+4. Live read-only checks: public form unchanged for Nikalas (no add-on group visible to individuals, no wine row until switched on); admin Add-ons page; 0 runtime errors since the deploy.
+5. `tix live T-7 production`, `tix live T-22 production` (`--yes-prod`); release-note draft (with screenshots) on the production board; demo reseed (03:00) → check demo.vineworks.ge next morning.
+6. Later, separate: contract migration (`groupId` NOT NULL).
 
 ## 8. Not doing
 Merging extras into add-ons · stock/inventory (one wine table makes it easy later) · guests

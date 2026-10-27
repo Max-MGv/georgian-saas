@@ -1,6 +1,7 @@
 import { asTetri, asTetriOrNull, balanceDue, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
-import { INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView } from '@/lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, INVOICE_PRODUCT_LABEL, INVOICE_REGISTRATION_LABEL, invoiceView, wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import type { Product } from '@/lib/pricingUtils'
+import { lineTotals } from '@/lib/orderLines'
 import { formatShortDate } from '@/lib/emails/templates/dateFormat'
 
 const KA = INVOICE_PRODUCT_LABEL.ka
@@ -31,7 +32,10 @@ type Order = {
    *  the full total as if nothing had been collected yet. */
   paymentsSettledTotal: number
   company: { name: string; identificationCode: string | null } | null
-  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  /** Add-on lines with their group (T-7), as sold — names are the line's snapshot. */
+  masterclassLines: InvoiceAddOnLine[]
+  /** Wine for the table as sold (T-22). */
+  wineLines: InvoiceWineLine[]
   extras: { label: string; amount: number }[]
 }
 
@@ -78,9 +82,8 @@ export default function InvoicePrint({ order, payment, detailed = false, display
   const idCode = order.company?.identificationCode ?? '—'
 
   // Detailed calculations
-  const mcAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-  const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
-  const bookingAmt = totalPrice - mcAmt - extrasAmt
+  const { masterclass: mcAmt, extras: extrasAmt, wine: wineAmt } = lineTotals(order)
+  const bookingAmt = totalPrice - mcAmt - wineAmt - extrasAmt
 
   // Balance due (Plan-PostPaymentExtras Chunk 2, KnownBugs #64) — only shown
   // once something has actually been collected, same gate as everywhere else
@@ -104,7 +107,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
     freeGuestCount: order.freeGuestCount,
     tastingOnlyRate: order.tastingOnlyRate, lunchOnlyRate: order.lunchOnlyRate, tastingLunchRate: order.tastingLunchRate,
     registrationFeeSnapshot: order.registrationFeeSnapshot,
-    totalPrice, masterclassAmt: mcAmt, extrasAmt,
+    totalPrice, masterclassAmt: mcAmt, wineAmt, extrasAmt,
   })
   const money = (t: number) => formatTetri(asTetri(t), { space: true, decimals: true })
   const countOf = (p: Product) => view.guests.find(g => g.product === p)?.count ?? 0
@@ -174,7 +177,7 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           {simpleProducts.map(p => <Row key={p} label={KA[p]} value={money(amountOf(p))} />)}
           {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
           <Row label="დამ. სტუმრების კვება" value={money(0)} />
-          {mcAmt + extrasAmt > 0 && <Row label="მასტერკლასი და დამატებები" value={money(mcAmt + extrasAmt)} />}
+          {mcAmt + wineAmt + extrasAmt > 0 && <Row label="დამატებითი სერვისები და ხარჯები" value={money(mcAmt + wineAmt + extrasAmt)} />}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
             <strong style={{ fontSize: 15 }}>ჯამური თანხა: {formatTetriOrDash(asTetriOrNull(totalPrice), { space: true, decimals: true })}</strong>
           </div>
@@ -229,15 +232,24 @@ export default function InvoicePrint({ order, payment, detailed = false, display
         <Row label="სულ" value={`${view.totalGuests} კაცი`} />
       </Section>
 
-      {/* Masterclass lines */}
-      {order.masterclassLines.length > 0 && (
-        <Section title="მასტერკლასი">
-          {order.masterclassLines.map((l, i) => (
+      {/* Add-on lines — one section per group, titled with the winery's own group name (T-7) */}
+      {groupInvoiceAddOns(order.masterclassLines, 'ka', 'დამატებითი სერვისები').map(g => (
+        <Section key={g.title} title={g.title}>
+          {g.lines.map((l, i) => (
             <Row
               key={i}
-              label={`${l.name} × ${l.quantity}`}
+              label={addOnLabel(l, 'ka')}
               value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })}
             />
+          ))}
+        </Section>
+      ))}
+
+      {/* Wine for the table (T-22) — each line with the reason for a non-standard price */}
+      {order.wineLines.length > 0 && (
+        <Section title="ღვინო მაგიდისთვის">
+          {order.wineLines.map((l, i) => (
+            <Row key={i} label={wineLineLabel(l, 'ka')} value={money(l.lineTotal)} />
           ))}
         </Section>
       )}
@@ -260,7 +272,10 @@ export default function InvoicePrint({ order, payment, detailed = false, display
           : <Row label={KA[view.visitProduct]} value={money(bookingAmt)} />}
         {view.registration > 0 && <Row label={INVOICE_REGISTRATION_LABEL.ka} value={money(view.registration)} />}
         {order.masterclassLines.map((l, i) => (
-          <Row key={i} label={l.name} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
+          <Row key={i} label={addOnLabel(l, 'ka', false)} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity), { space: true, decimals: true })} />
+        ))}
+        {order.wineLines.map((l, i) => (
+          <Row key={`w${i}`} label={wineLineLabel(l, 'ka')} value={money(l.lineTotal)} />
         ))}
         {order.extras.map((e, i) => (
           <Row key={i} label={e.label} value={formatTetri(asTetri(e.amount), { space: true, decimals: true })} />

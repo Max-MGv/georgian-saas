@@ -27,6 +27,8 @@ export default async function WineOrdersPage() {
         payments: { where: { reversedAt: null }, select: { amount: true, settledAt: true, status: true, flittOrderId: true, createdAt: true } },
         // T-12 — the exporter label comes from the company, live (it is a label, not a fact of the order).
         company: { select: { isExporter: true } },
+        // T-22 — a guest purchase says which visit it came from (a link, never a copy: the booking's date / company stay live).
+        sourceOrder: { select: { id: true, date: true, bookingType: true, company: { select: { name: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -37,8 +39,11 @@ export default async function WineOrdersPage() {
   // feeOwed: on a PAID order, due − paid, SIGNED: > 0 still owed (a delivery fee set after payment),
   // < 0 paid too much (shown as a credit, the way bookings show it — blind review 2026-10-13).
   // pendingLink: the newest delivery-fee card link that has not been paid.
-  const ordersWithTotal = orders.map(({ payments, company, ...rest }) => {
-    const o = { ...rest, isExporter: company?.isExporter ?? false }
+  const ordersWithTotal = orders.map(({ payments, company, sourceOrder, ...rest }) => {
+    const visit = sourceOrder
+      ? { id: sourceOrder.id, date: sourceOrder.date.toISOString(), label: sourceOrder.bookingType === 'COMPANY' && sourceOrder.company ? sourceOrder.company.name : '' }
+      : null
+    const o = { ...rest, isExporter: company?.isExporter ?? false, visit }
     const paidSoFar = payments.filter(p => p.settledAt).reduce((sum, p) => sum + p.amount, 0)
     const due = wineOrderAmountDue(o)
     const feeOwed = o.paidAt && due != null ? due - paidSoFar : 0

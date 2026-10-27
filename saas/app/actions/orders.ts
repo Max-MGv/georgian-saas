@@ -11,8 +11,11 @@ import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
-import { adminQuote, boxColumns, countsOf, notOffered, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
-import { checkAdminOrder, checkMasterclassLines, type AdminOrderProblem } from '@/lib/bookingInput'
+import { adminQuote, boxColumns, countsOf, notOffered, payingGuests, priceCounts, PRODUCT_LABEL, PRODUCTS, ratesForCounts, ratesFromProductSnapshot, totalGuests, type BookingVisitType, type Counts, type ManualRates, type Product, type ProductRates } from '@/lib/pricingUtils'
+import { checkAdminOrder, checkMasterclassLines, MASTERCLASS_CATALOGUE_SELECT, type AdminOrderProblem } from '@/lib/bookingInput'
+import { invoiceAddOnLine, invoiceWineLine, lineTotals, sumAmountLines, sumQuantityLines, sumWineLines } from '@/lib/orderLines'
+import { withSyncedQuantities, writeSyncedQuantities } from '@/lib/addOnLines'
+import { priceTableWine } from '@/lib/tableWine'
 import { NO_TYPED_RATES } from '@/lib/adminOrderView'
 import { adminT } from '@/lib/adminT'
 import { getSetting } from '@/app/actions/settings'
@@ -131,7 +134,7 @@ export async function updateOrderBooking(id: string, data: {
   const en = (p: AdminOrderProblem) => adminT('en', p.key, p.vars)
 
   const result = await withTenantDb(tenantId, async tx => {
-    const order = await tx.order.findFirst({ where: { id, tenantId }, include: { masterclassLines: true, extras: true } })
+    const order = await tx.order.findFirst({ where: { id, tenantId }, include: { masterclassLines: true, wineLines: true, extras: true } })
     if (!order) return { error: 'Order not found.' } as const
 
     const newCompanyId = data.companyId || null
@@ -161,13 +164,10 @@ export async function updateOrderBooking(id: string, data: {
         const key = individual ? 'orderForm.err.individualsMissing' : 'orderForm.err.missingRate'
         return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
       }
-      const lines = {
-        masterclass: order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0),
-        extras: order.extras.reduce((s, e) => s + e.amount, 0),
-      }
+      const lines = lineTotals(order)
       // A company with no price table yet: priced later on the Guest breakdown (typed rates), as on New Order.
       pricing = quote.kind === 'unpriced'
-        ? { totalPrice: lines.masterclass + lines.extras, tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
+        ? { totalPrice: lines.masterclass + lines.wine + lines.extras, tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
         : {
             totalPrice: priceCounts(quote.rates, counts, lines),
             tastingOnlyRate: quote.rates.tastingOnly, lunchOnlyRate: quote.rates.lunchOnly,
@@ -288,7 +288,7 @@ export async function updateOrderEnhanced(
     manualRates: ManualRates
   }
 ): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
+  const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
   const result = await withTenantDb(tenantId, async (tx) => {
@@ -296,7 +296,8 @@ export async function updateOrderEnhanced(
       where: { id, tenantId },
       include: {
         company: { include: { prices: true } },
-        masterclassLines: true,
+        masterclassLines: { include: { masterclassItem: true } },
+        wineLines: true,
         extras: true,
       },
     })
@@ -358,8 +359,10 @@ export async function updateOrderEnhanced(
 
     let pricing: { totalPrice: number; rates: ProductRates | null } | null = null
     if (changed) {
-      const masterclassAmt = order.masterclassLines.reduce((sum, l) => sum + l.quantity * l.pricePerUnit, 0)
-      const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
+      // A per-person add-on is charged per paying guest, so its quantity follows the new guests (D-11) — priced here
+      // with the quantities it WILL have; they are written below, in this same transaction, once the price is accepted.
+      const synced = withSyncedQuantities(order.masterclassLines, payingGuests(counts)).lines
+      const { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt } = lineTotals({ masterclassLines: synced, extras: order.extras, wineLines: order.wineLines })
       // The company's table at today's rows (each product by its own count), typed rates for the rest — the
       // same adminQuote the page previews with, so the stored total is the one the admin saw. An individual
       // order: the Individuals table, no registration fee (D-14).
@@ -376,12 +379,15 @@ export async function updateOrderEnhanced(
           const needed = PRODUCTS.filter(p => counts[p] > 0)
           return { error: en({ key: 'orderForm.err.rateRequired', vars: { products: needed.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
         }
-        pricing = { totalPrice: masterclassAmt + extrasAmt, rates: null }
+        pricing = { totalPrice: masterclassAmt + wineAmt + extrasAmt, rates: null }
       } else {
-        pricing = { totalPrice: priceCounts(quote.rates, counts, { masterclass: masterclassAmt, extras: extrasAmt }), rates: quote.rates }
+        pricing = { totalPrice: priceCounts(quote.rates, counts, { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt }), rates: quote.rates }
       }
     }
 
+    if (pricing) {
+      await writeSyncedQuantities(tx, { tenantId, orderId: id, actorId: actor?.id ?? null, lines: order.masterclassLines, payingGuests: payingGuests(counts) })
+    }
     await tx.order.update({
       where: { id },
       data: {
@@ -433,6 +439,8 @@ export async function createOrderAdmin(data: {
   manualRates: ManualRates
   /** The price always comes from the masterclass catalogue, never from the browser (Q-1, #93). */
   masterclassLines: { masterclassItemId: string; quantity: number }[]
+  /** Wine for the table (T-22): bottles of wines switched on for bookings. Priced on the server with the company's terms. */
+  wineLines?: { vintageId: string; quantity: number }[]
   extras: { label: string; amount: number }[]
   /**
    * One entry per contact role, from the admin's inline pickers (Plan-ContactRoles Chunk 10).
@@ -468,7 +476,7 @@ export async function createOrderAdmin(data: {
   }
 
   const tenantId = await getTenantId()
-  const extrasAmt = data.extras.reduce((s, e) => s + e.amount, 0)
+  const extrasAmt = sumAmountLines(data.extras)
 
   const created = await withTenantDb(tenantId, async (tx) => {
     const company = data.companyId
@@ -477,14 +485,21 @@ export async function createOrderAdmin(data: {
     if (data.companyId && !company) return { error: 'Company not found.' } as const
 
     const catalogue = data.masterclassLines.length > 0
-      ? await tx.masterclassItem.findMany({ where: { tenantId }, select: { id: true, unitType: true, active: true, pricePerUnit: true } })
+      ? await tx.masterclassItem.findMany({ where: { tenantId }, select: MASTERCLASS_CATALOGUE_SELECT })
       : []
-    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue)
+    // Per person = the paying guests (D-11); admins may add any active item, whatever its group shows (E6), so no
+    // visibility check here — only the public form is bound by it.
+    const checkedLines = checkMasterclassLines(data.masterclassLines, catalogue, { payingGuests: payingGuests(counts) })
     if (!checkedLines.ok) {
-      return { error: 'A masterclass line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
+      return { error: 'An add-on line is not valid (unknown or inactive item, or a quantity that is not a whole number from 1 to 999).' } as const
     }
     const masterclassLines = checkedLines.lines
-    const masterclassAmt = masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
+    const masterclassAmt = sumQuantityLines(masterclassLines)
+    // Wine for the table: bookable wines only, the company's own terms (an admin screen is trusted), per-line rounding.
+    const wine = await priceTableWine(tx, tenantId, { lines: data.wineLines, termsCompanyId: company?.id ?? null, locale: 'en' })
+    if (!wine.ok) {
+      return { error: wine.error === 'bad_quantity' ? 'A wine quantity must be a whole number from 1 to 999.' : 'A wine line is not valid (the wine is not offered on bookings, or appears twice).' } as const
+    }
 
     // The company's table by each product's own count, the admin's typed rate for anything it does not price;
     // no table and nothing typed = priced later (total = the lines), as before. An individual order: the
@@ -498,7 +513,7 @@ export async function createOrderAdmin(data: {
       return { error: en({ key, vars: { products: quote.products.map(p => PRODUCT_LABEL[p]).join(', ') } }) } as const
     }
     const rates = quote.kind === 'priced' ? quote.rates : null
-    const totalPrice = rates ? priceCounts(rates, counts, { masterclass: masterclassAmt, extras: extrasAmt }) : masterclassAmt + extrasAmt
+    const totalPrice = rates ? priceCounts(rates, counts, { masterclass: masterclassAmt, extras: extrasAmt, wine: wine.total }) : masterclassAmt + wine.total + extrasAmt
 
     const order = await tx.order.create({
       data: {
@@ -530,8 +545,9 @@ export async function createOrderAdmin(data: {
         ...NEW_ORDER_COLUMNS,
         ...(data.companyId ? { companyId: data.companyId } : {}),
         masterclassLines: masterclassLines.length
-          ? { create: masterclassLines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })) }
+          ? { create: masterclassLines }
           : undefined,
+        wineLines: wine.rows.length ? { create: wine.rows } : undefined,
         extras: data.extras.length
           ? { create: data.extras.map(e => ({ label: e.label.trim(), amount: e.amount })) }
           : undefined,
@@ -599,6 +615,7 @@ export async function sendOrderInvoice(
         include: {
           company: { select: { id: true, name: true, identificationCode: true } },
           masterclassLines: { include: { masterclassItem: true } },
+          wineLines: true,
           extras: true,
           // A re-sent invoice on an order that's already been paid something
           // must say so — Plan-PostPaymentExtras Chunk 2 / KnownBugs #64's own
@@ -658,11 +675,8 @@ export async function sendOrderInvoice(
       paymentsSettledTotal: order.payments.reduce((sum, p) => sum + p.amount, 0),
       companyName: order.company?.name ?? null,
       identificationCode: order.company?.identificationCode ?? null,
-      masterclassLines: order.masterclassLines.map(l => ({
-        name: l.masterclassItem.name,
-        quantity: l.quantity,
-        pricePerUnit: l.pricePerUnit,
-      })),
+      masterclassLines: order.masterclassLines.map(invoiceAddOnLine),
+      wineLines: order.wineLines.map(invoiceWineLine),
       extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
       payment: { recipientName, personalNumber, bankName, bankCode, iban },
       customMessage,
@@ -692,11 +706,9 @@ export async function sendOrderInvoice(
           tastingLunchGuests: order.tastingLunchGuests ?? 0,
           freeGuestCount: order.freeGuestCount,
           visitType: order.visitType,
-          masterclassLines: order.masterclassLines.map(l => ({
-            name: l.masterclassItem.name,
-            quantity: l.quantity,
-            pricePerUnit: l.pricePerUnit,
-          })),
+          // What the invoice said, kept as sold: name + group in both languages (an older row has only `name`).
+          masterclassLines: order.masterclassLines.map(invoiceAddOnLine),
+          wineLines: order.wineLines.map(invoiceWineLine),
           extras: order.extras.map(e => ({ label: e.label, amount: e.amount })),
           customMessage,
           locale,
@@ -783,6 +795,9 @@ export async function exportOrdersCsv(filters: {
     },
     include: {
       company: true,
+      // Add-ons and wine for the table: their own CSV columns (T-7 / T-22).
+      masterclassLines: true,
+      wineLines: true,
       // Every live (settled, not reversed) payment — Balance Due (GEL) below
       // needs the true collected total, per Plan-PostPaymentExtras Chunk 2 /
       // KnownBugs #64: a CSV that only ever showed "Total (GEL)" is exactly
@@ -801,7 +816,7 @@ export async function exportOrdersCsv(filters: {
   // exports as indistinguishable from a paid one. Invoice Sent gets its own
   // date rather than collapsing into Payment, since an order can be both
   // invoiced and paid — which the old payment ladder could not represent.
-  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
+  const header = ['Date', 'Time', 'Name', 'Surname', 'Company', 'Booking Type', 'Visit Type', 'Guests', 'Nationality', 'Total (GEL)', 'Add-ons (GEL)', 'Table wine (GEL)', 'Balance Due (GEL)', 'Status', 'Payment', 'Paid At', 'Invoice Sent At', 'Email', 'Phone', 'Notes']
   const rows = orders.map(o => {
     // Only populated once the order has actually been paid something —
     // otherwise "balance due" is just the whole total, which the Total (GEL)
@@ -824,6 +839,9 @@ export async function exportOrdersCsv(filters: {
     // (bug #46). toMajor rather than formatTetri: a ₾ in the cell would make
     // it text and break the column's arithmetic.
     o.totalPrice != null ? toMajor(asTetri(o.totalPrice)) : '',
+    // Included in the total above, shown on their own so a bookkeeper can split visit / add-ons / wine.
+    toMajor(asTetri(sumQuantityLines(o.masterclassLines))),
+    toMajor(asTetri(sumWineLines(o.wineLines))),
     o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
     o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
@@ -881,7 +899,7 @@ export async function assignOrderCompany(
   const result = await withTenantDb(tenantId, async (tx) => {
     const order = await tx.order.findFirst({
       where: { id: orderId, tenantId },
-      include: { masterclassLines: true, extras: true },
+      include: { masterclassLines: true, wineLines: true, extras: true },
     })
     if (!order) return { error: 'Order not found.' } as const
     if (order.companyId) return { error: 'This order already has a company linked.' } as const
@@ -892,8 +910,7 @@ export async function assignOrderCompany(
     })
     if (!company) return { error: 'Company not found.' } as const
 
-    const masterclassAmt = order.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-    const extrasAmt = order.extras.reduce((s, e) => s + e.amount, 0)
+    const { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt } = lineTotals(order)
 
     // The three snapshots record the tier rates this order was actually sold
     // at, exactly as createBooking.ts does. They were NOT written here until
@@ -915,8 +932,8 @@ export async function assignOrderCompany(
     }
 
     const counts = countsOf(order)
-    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
-    let totalPrice = masterclassAmt + extrasAmt
+    const lines = { masterclass: masterclassAmt, extras: extrasAmt, wine: wineAmt }
+    let totalPrice = masterclassAmt + wineAmt + extrasAmt
     let snapshot: { tastingOnlyRate: number | null; lunchOnlyRate: number | null; tastingLunchRate: number | null; registrationFeeSnapshot: number | null } =
       { tastingOnlyRate: null, lunchOnlyRate: null, tastingLunchRate: null, registrationFeeSnapshot: null }
     if (company.prices.length) {

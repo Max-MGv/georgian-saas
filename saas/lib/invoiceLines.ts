@@ -26,6 +26,8 @@ export type InvoiceOrderInput = {
   registrationFeeSnapshot: number | null
   totalPrice: number
   masterclassAmt: number
+  /** Wine for the table (T-22). Omitted = none. */
+  wineAmt?: number
   extrasAmt: number
 }
 
@@ -52,12 +54,77 @@ export const INVOICE_PRODUCT_LABEL: Record<InvoiceLocale, Record<Product, string
 }
 export const INVOICE_REGISTRATION_LABEL: Record<InvoiceLocale, string> = { ka: 'რეგისტრაციის საფასური', en: 'Registration fee' }
 
+// ─── Add-on lines (T-7): one section per group, on every invoice ──────────────────────────────────────────────
+//
+// An invoice shows each add-on under the group the winery filed it in ("Masterclass", "Food", …), named as it was when
+// it was sold: the line's snapshot, never today's catalogue. The Georgian name is used on Georgian invoices when the
+// winery gave one. Old stored invoices (InvoiceSent rows) carry only `name` — they read as one untitled group.
+
+export type InvoiceAddOnLine = {
+  name: string
+  nameKa?: string | null
+  groupName?: string | null
+  groupNameKa?: string | null
+  quantity: number
+  pricePerUnit: number
+}
+
+const pick = (en: string, ka: string | null | undefined, locale: InvoiceLocale) => (locale === 'ka' && ka && ka.trim() ? ka : en)
+
+// ─── Wine for the table (T-22) on an invoice ──────────────────────────────────────────────────────────────
+// One line per wine: "Saperavi 2021 × 2" with what it cost, and WHY it cost that when it was not the website price —
+// "agreed 40.00" (the company's own price) or "38.00 −10%" (the company's % off) — so the invoice explains itself (D-16).
+
+export type InvoiceWineLine = {
+  name: string
+  year: number
+  quantity: number
+  /** Per bottle before the % — the agreed price when `negotiated`. */
+  unitPrice: number
+  negotiated: boolean
+  discountPercent: number | null
+  /** What this line cost, rounded on its own. */
+  lineTotal: number
+}
+
+const WINE_AGREED: Record<InvoiceLocale, string> = { ka: 'შეთანხმებული', en: 'agreed' }
+const fixed2 = (tetri: number) => (tetri / 100).toFixed(2)
+
+/** "Saperavi 2021 × 2" plus the reason in brackets when the price was not the standard one. */
+export function wineLineLabel(l: InvoiceWineLine, locale: InvoiceLocale): string {
+  const base = `${l.name} ${l.year} × ${l.quantity}`
+  if (l.negotiated) return `${base} (${WINE_AGREED[locale]} ${fixed2(l.unitPrice)})`
+  if (l.discountPercent) return `${base} (${fixed2(l.unitPrice)} −${l.discountPercent}%)`
+  return base
+}
+
+/** "Khinkali folding class × 12" — or just the name for a single one. */
+export function addOnLabel(l: InvoiceAddOnLine, locale: InvoiceLocale, withQty = true): string {
+  const name = pick(l.name, l.nameKa, locale)
+  return withQty ? `${name} × ${l.quantity}` : name
+}
+
+/**
+ * The lines under their group's name, groups in the order they first appear. A line with no group (an old invoice, or
+ * an item whose group was removed before the snapshot existed) goes under `fallbackTitle`.
+ */
+export function groupInvoiceAddOns<T extends InvoiceAddOnLine>(lines: readonly T[], locale: InvoiceLocale, fallbackTitle: string): { title: string; lines: T[] }[] {
+  const titles: string[] = []
+  const byTitle = new Map<string, T[]>()
+  for (const l of lines) {
+    const title = l.groupName ? pick(l.groupName, l.groupNameKa, locale) : fallbackTitle
+    if (!byTitle.has(title)) { byTitle.set(title, []); titles.push(title) }
+    byTitle.get(title)!.push(l)
+  }
+  return titles.map(title => ({ title, lines: byTitle.get(title)! }))
+}
+
 export function invoiceView(o: InvoiceOrderInput): InvoiceView {
   const counts: Record<Product, number> = { tastingOnly: o.tastingOnlyGuests, lunchOnly: o.lunchOnlyGuests, tastingLunch: o.tastingLunchGuests }
   const rates: Record<Product, number | null> = { tastingOnly: o.tastingOnlyRate, lunchOnly: o.lunchOnlyRate, tastingLunch: o.tastingLunchRate }
   const order: Product[] = ['tastingLunch', 'lunchOnly', 'tastingOnly']
   const guests = order.filter(p => counts[p] > 0).map(p => ({ product: p, count: counts[p] }))
-  const bookingAmt = o.totalPrice - o.masterclassAmt - o.extrasAmt
+  const bookingAmt = o.totalPrice - o.masterclassAmt - (o.wineAmt ?? 0) - o.extrasAmt
   const registration = o.registrationFeeSnapshot ?? 0
   const visit = o.visitType as BookingVisitType
   const visitProduct: Product = visit === 'TASTING' ? 'tastingOnly' : visit === 'LUNCH' ? 'lunchOnly' : 'tastingLunch'

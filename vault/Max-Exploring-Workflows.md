@@ -4,6 +4,8 @@ tags: [transparency, session-log, workflow]
 
 # Max Exploring Workflows — full record of the 2026-10-24 session
 
+> **See also:** [[Retro-T7-T22-WhyItTookFourHours]] (2026-10-25) — the follow-up "why did this take 3+ hours?" analysis incl. a blind review, compared against Rule 12.
+
 **Why this file exists:** Max, 2026-10-24: "I don't like how I am in the blind about our workflow, this is the first
 I am hearing about you creating temporary folders... record EVERYTHING from this conversation so I can interrogate
 it later." This is that record — every action taken in this session, in order, including the ones that went wrong,

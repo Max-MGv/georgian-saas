@@ -208,6 +208,7 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
     realCompany?.wineDiscountPercent ?? null,
   )
   const unitPrice = Object.fromEntries(pricing.lines.map(l => [l.vintageId, l.unitPrice]))
+  const pricedLine = new Map(pricing.lines.map(l => [l.vintageId, l]))
   const discountPercent = pricing.discountPercent
   const totalAmount = pricing.total
   // Minimum order (T-8) — on the wines total after company pricing, never the delivery fee,
@@ -280,6 +281,10 @@ export async function submitWineOrder(formData: FormData): Promise<WineOrderResu
           // The price actually charged per bottle: negotiated, or standard (the % sits on the order).
           priceSnapshot: unitPrice[w.vintageId],
           quantity: w.quantity,
+          // What THIS line cost, rounded on its own (T-22 / C-1) — the statistics add these up, nothing re-multiplies.
+          negotiated: pricedLine.get(w.vintageId)!.negotiated,
+          discountPercent: pricedLine.get(w.vintageId)!.discountPercent,
+          lineTotal: pricedLine.get(w.vintageId)!.lineTotal,
         })),
       })
       // Who to contact about this order, one row per role, with snapshots. The Contact

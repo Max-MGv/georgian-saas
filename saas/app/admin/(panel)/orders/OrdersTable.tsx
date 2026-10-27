@@ -6,6 +6,8 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
+import { lineTotals } from '@/lib/orderLines'
+import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
 import BookingSheetPrint from './BookingSheetPrint'
 import { countryName } from '@/lib/countries'
@@ -109,7 +111,9 @@ type Order = {
   nationalities: string[]
   company: { name: string; identificationCode: string | null } | null
   requestedCompanyName: string | null
-  masterclassLines: { name: string; quantity: number; pricePerUnit: number }[]
+  masterclassLines: InvoiceAddOnLine[]
+  /** Wine for the table on this booking (T-22). */
+  wineLines: InvoiceWineLine[]
   extras: { label: string; amount: number }[]
   contacts: { roleKey: string; roleLabelEn: string; roleLabelKa: string; name: string; phone: string | null; email: string | null }[]
   /** People eligible to receive this order's invoice email — see lib/contactResolution.ts's
@@ -1158,6 +1162,23 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                   </td>
                 )}
 
+                {/* Wine for the table (T-22) */}
+                {col('tableWine') && (
+                  <td className="px-4 py-3" style={{ color: C.muted, fontSize: 12 }}>
+                    {order.wineLines.length > 0
+                      ? <OneLine title={order.wineLines.map(l => `${l.name} ${l.year} ×${l.quantity}`).join(', ')}>
+                          {order.wineLines.map((l, idx) => (
+                            <span key={idx}>
+                              {idx > 0 && <span style={{ color: C.faint }}> · </span>}
+                              {l.name} {l.year} <span style={{ color: C.faint }}>×{l.quantity}</span>
+                            </span>
+                          ))}
+                        </OneLine>
+                      : <span style={{ color: C.faint }}>—</span>
+                    }
+                  </td>
+                )}
+
                 {/* Food */}
                 {col('food') && (
                   <td className="px-4 py-3" style={{ fontSize: 12 }}>
@@ -1640,9 +1661,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const top = Math.min(Math.max(hoverPos.y - 60, pad), vh - cardH - pad)
         const cfg = styleFor(o.stage)
         const hasSplit = o.tastingGuestCount > 0 || o.lunchOnlyGuestCount > 0 || o.lunchGuestCount > 0 || o.freeGuestCount > 0
-        const mcAmt = o.masterclassLines.reduce((s, l) => s + l.quantity * l.pricePerUnit, 0)
-        const extrasAmt = o.extras.reduce((s, e) => s + e.amount, 0)
-        const bookingAmt = (o.totalPrice ?? 0) - mcAmt - extrasAmt
+        const { masterclass: mcAmt, extras: extrasAmt, wine: wineAmt } = lineTotals(o)
+        const bookingAmt = (o.totalPrice ?? 0) - mcAmt - wineAmt - extrasAmt
         return (
           <div
             style={{
@@ -1701,6 +1721,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <PRow label={visitLabel(locale, o.visitType)} value={formatTetri(asTetri(bookingAmt))} />
                 {o.masterclassLines.map((l, i) => (
                   <PRow key={i} label={`${l.name} ×${l.quantity}`} value={formatTetri(multiplyTetri(asTetri(l.pricePerUnit), l.quantity))} />
+                ))}
+                {o.wineLines.map((l, i) => (
+                  <PRow key={`w${i}`} label={wineLineLabel(l, 'en')} value={formatTetri(asTetri(l.lineTotal))} />
                 ))}
                 {o.extras.map((e, i) => (
                   <PRow key={i} label={e.label} value={formatTetri(asTetri(e.amount))} />

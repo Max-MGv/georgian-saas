@@ -259,3 +259,17 @@ build and two runs would have done). Full story: `vault/Plan-OrderPageMirror.md`
    release, not afterwards. The draft lives on the **production** board. Routine: `vault/Plan-ReleaseNotes.md`.
 5. **Edit files with the editor tool**, not `node -e` / `sed` string patches — CRLF line endings and escaping broke
    those repeatedly.
+
+## 13. Size before building; slice big tickets; no unrequested extras (Max, 2026-10-25)
+
+From the T-7 + T-22 retro ([[Retro-T7-T22-WhyItTookFourHours]]: Max asked why it took ~4 h when a ship took 30 min — nothing was "ready", the job was
+70–80× bigger; Rule 12 says how to build, nothing said how big).
+
+1. **Say the size first.** Before starting a ticket, tell Max: roughly how many files, whether it needs a schema change, and whether it touches
+   money maths, the public booking form or invoices.
+2. **Slice anything big.** More than ~15 files, or a schema change + money + the public form together → propose separately testable releases
+   (foundation first) and get Max's OK on the slice before building. Two tickets that share files still ship as two releases.
+3. **No unrequested extras.** Demo seed, copy changes, "nice to have" columns or switches that the ticket / decisions did not ask for: ask first.
+4. **Commit small and complete.** Each commit contains every file it claims; say plainly where tests live when they are untracked.
+5. **Read the real page before writing a test** (what must be filled in before a row appears, what a setting must be) — the T-7/T-22 edge spec
+   failed twice on this.

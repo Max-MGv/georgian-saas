@@ -70,6 +70,8 @@ export type AdminOrderView = {
   lunchGuests: number
   /** Products with guests and no rate from either source — name them in the missingRate message. */
   missing: Product[]
+  /** The add-on lines' amount at THESE guests (per person × paying guests). Included in `total`. */
+  addOnAmt: number
 }
 
 export function adminOrderView(input: {
@@ -84,7 +86,15 @@ export function adminOrderView(input: {
   registration: number
   /** Typed rates; ignored for an individual order (D-14). */
   manual: Record<Product, string>
-  masterclassAmt: number
+  /**
+   * What the add-on lines cost. EITHER a plain amount (callers that only have a total), OR the lines themselves —
+   * preferred: a PER_PERSON line is charged per PAYING guest, so its amount has to be worked out from the guests
+   * being typed, not from the quantity stored a moment ago (T-7 D-11: it follows the guests).
+   */
+  masterclassAmt?: number
+  addOnLines?: readonly { quantity: number; pricePerUnit: number; unit: 'PER_PERSON' | 'PER_PIECE' | 'FLAT' }[]
+  /** Wine for the table (T-22), tetri — already priced by the caller with the company's terms (lib/winePricing.ts). */
+  wineAmt?: number
   extrasAmt: number
   /** The order already carries frozen rates (order page) — clearing every typed rate is then refused, not "price later". */
   hadRates?: boolean
@@ -102,7 +112,11 @@ export function adminOrderView(input: {
     guestCount: num(input.guests),
     boxes: { tastingOnly: box('tastingOnly'), lunchOnly: box('lunchOnly'), tastingLunch: box('tastingLunch'), free: box('free') },
   })
-  const empty: AdminOrderView = { counts: null, problem: null, quote: null, rateInputs: [], lines: [], registration: 0, total: null, lunchGuests: 0, missing: [] }
+  // The add-on lines at the guests entered: per person follows the paying guests, flat is once, per piece is typed.
+  const addOnAmtFor = (paying: number) => input.addOnLines
+    ? input.addOnLines.reduce((s, l) => s + (l.unit === 'PER_PERSON' ? paying : l.unit === 'FLAT' ? 1 : l.quantity) * l.pricePerUnit, 0)
+    : input.masterclassAmt ?? 0
+  const empty: AdminOrderView = { counts: null, problem: null, quote: null, rateInputs: [], lines: [], registration: 0, total: null, lunchGuests: 0, missing: [], addOnAmt: addOnAmtFor(0) }
   // The lunch guests as entered, even while the boxes can't be saved: a different problem (too many free guests, a
   // visit mismatch) must not blank the hot-dish selects and say "add a lunch guest" (acceptance test 2026-10-23).
   // Individuals: their one count is lunch on Tasting + Lunch.
@@ -124,9 +138,11 @@ export function adminOrderView(input: {
         return { product: p, count: counts[p], rate, amount: rate * counts[p], row: tier && productPrice(tier, p) === rate ? { min: tier.minGuests, max: tier.maxGuests, outside: counts[p] >= tier.minGuests && counts[p] <= tier.maxGuests ? false : counts[p] > tier.maxGuests && !input.prices.some(r => productPrice(r, p) != null && r.maxGuests > tier.maxGuests) ? 'above' : 'gap' } : null }
       })
     : []
-  const lineTotals = { masterclass: input.masterclassAmt, extras: input.extrasAmt }
+  const addOnAmt = addOnAmtFor(counts.tastingOnly + counts.lunchOnly + counts.tastingLunch)
+  const wineAmt = input.wineAmt ?? 0
+  const lineTotals = { masterclass: addOnAmt, wine: wineAmt, extras: input.extrasAmt }
   const total = quote.kind === 'priced' ? priceCounts(quote.rates, counts, lineTotals)
-    : quote.kind === 'unpriced' ? input.masterclassAmt + input.extrasAmt
+    : quote.kind === 'unpriced' ? addOnAmt + wineAmt + input.extrasAmt
     : null
   // updateOrderEnhanced's rule: an order that already has a price never drops back to "price later" (review 8a).
   const unpricedButWasPriced = quote.kind === 'unpriced' && input.hadRates === true
@@ -135,6 +151,6 @@ export function adminOrderView(input: {
     : { key: company ? 'orderForm.err.missingRate' : 'orderForm.err.individualsMissing' }
   return {
     counts, problem, quote, rateInputs, lines, registration: quote.kind === 'priced' ? quote.rates.registration : 0,
-    total: unpricedButWasPriced ? null : total, lunchGuests, missing,
+    total: unpricedButWasPriced ? null : total, lunchGuests, missing, addOnAmt,
   }
 }

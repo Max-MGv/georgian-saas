@@ -1,5 +1,6 @@
 import { withTenantDb } from '@/lib/db'
 import { countsOf, notOffered, priceCounts, ratesForCounts, ratesFromProductSnapshot } from '@/lib/pricingUtils'
+import { lineTotals } from '@/lib/orderLines'
 
 /**
  * Recompute an order's total after its lines change.
@@ -31,19 +32,16 @@ export async function recalcOrderTotal(orderId: string, tenantId: string, linesD
       include: {
         company: { include: { prices: true } },
         masterclassLines: true,
+        wineLines: true,
         extras: true,
       },
     })
     if (!order) return
 
-    const masterclassAmt = order.masterclassLines.reduce(
-      (sum, l) => sum + l.quantity * l.pricePerUnit,
-      0
-    )
-    const extrasAmt = order.extras.reduce((sum, e) => sum + e.amount, 0)
+    const lines = lineTotals(order)
+    const { masterclass: masterclassAmt, extras: extrasAmt } = lines
 
     const counts = countsOf(order)
-    const lines = { masterclass: masterclassAmt, extras: extrasAmt }
 
     // ── The normal path: price from what this order was actually sold at ──────
     const snapshotRates = ratesFromProductSnapshot(order)

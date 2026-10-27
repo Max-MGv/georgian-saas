@@ -8,6 +8,58 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-25 — T-7 + T-22 build status (READ THIS FIRST; full detail + resume checklist in `Plan-AddOnsAndWine.md` §0c)
+
+- **All on localhost + the shared dev DB. NOTHING pushed to staging, NOTHING on production.** ~17 local commits on branch `staging` (last: `5d84454`).
+- **BUILD COMPLETE on localhost (Part A add-ons T-7 + Part B wine T-22):** add-ons admin/public form/order page/New Order/invoices/staff sheet; wine for the table
+  (admin switch, company terms, public form, order page, New Order, invoice); orders list Add-ons + Table wine columns, CSV, staff sheet; guest purchases
+  ("Sales from this visit", badge on wine orders); `lib/wineSales.ts` + wine statistics Source filter (fixes #95); booking revenue 3-level switch;
+  demo seed table wine (type-checked only — NOT run, it wipes a tenant); onboarding copy. Docs: MaintenanceNotes §40 (items 10–17), FeatureLog #240, KnownBugs #94/#95.
+- **Tests (all green 2026-10-25):** unit 152 + 24 + 15 + 14; QA specs (untracked, `saas/tests/_qa/`): addons-public 5, addons-admin 4, wine-public 4, wine-admin 3,
+  guest-sales 4, edge-wine 3 (390px no sideways scroll, cancelled booking refuses guest sale, empty purchase refused, deactivated wine stays readable).
+- **`tix review` cards posted on T-7 and T-22 (now Ready to test, test steps on the tickets).** Waiting for Max to test on localhost:3100 and say what to change.
+- **Not done / for later:** release-note draft with screenshots (do when it is on staging; Georgian wording is Claude's), production read-only counts + runbook
+  (need Max's explicit go), committed Playwright specs that mention masterclass names elsewhere were not re-run as a full suite, demo seed untested.
+- **Open for Max:** G-1 (simple-form companies see add-on rows — built as "yes"); his message "i uploaded 2" — nothing found on disk; dev item
+  "Extra khachapuri" is active (shows in the old Masterclass row on staging until this is pushed); no wine is switched on "On bookings" in dev (specs restore it) — he
+  switches two on in Admin → Wines to see the wine row. Dev server `saas-3100` is running.
+- **Retro (Max asked "why 3+ h vs 30 min?"): `vault/Retro-T7-T22-WhyItTookFourHours.md`** — nothing was ready, scale ≈ 70–80× a quick ship, blind review agrees; proposed Rule 13 (size/slice before building) awaits Max's go.
+- Max's rules for this build: he reviews on localhost:3100 and tells me what to change BEFORE any push; nothing to master/production without his explicit go.
+
+---
+
+## 2026-10-24 (evening) — T-7 + T-22 restarted: plan re-based on the three-product pricing (docs only, no code)
+
+- Max moved T-7 and T-22 to In progress and asked whether plan + mockups already exist. They do: `vault/Plan-AddOnsAndWine.md`,
+  mockups `vault/addons-layout-options.html` (Max chose A/A/A/A), summary `vault/addons-summary.html`. No code built.
+- Plan was written 19 Oct, before T-152 (three products) and T-215 (order page). Added **§0** to the plan: what changed
+  (visit types now include `LUNCH`; `priceBooking` → `priceCounts`; #93 fixed; per-person follow-guests is new behaviour;
+  order page is click-to-edit) and **§0b**: C-1…C-5 + Q-A with recommendations. No answers from Max yet.
+- **Max answered C-1…C-5 + Q-A: "all as recommended"** → plan D-17…D-22; `tix decide` on T-7 and T-22.
+- **Rule 12 review done:** compared public form, New Order, order page, New Wine Order, Orders list. Gap list G-1…G-8 in plan §0a.
+  Refreshed interactive mockup `vault/addons-order-page.html` → https://claude.ai/artifact/PDr9prJjGNtC2uxVYZyJ4B (checked in the
+  browser pane: totals add up, per-person line follows the guest stepper, pencil/draft/Save work). Finding worth knowing: the public
+  form charges a per-person masterclass × the quantity the guest types (default 1) — see G-2.
+- **Max (2026-10-24/25): "build it on localhost, I'll tell you what to change before we push to staging"** → built Part A
+  (add-ons, T-7) end to end on localhost + the shared dev DB. **Nothing pushed to staging, nothing on production.** Commits on the
+  local `staging` branch (unpushed): `657f5c2` chunk 0 (`lib/orderLines.ts`), `dea57c3` schema (migration `20261024200000_addon_groups`
+  applied to dev), `476da25` Add-ons admin page, `242617b` public form, `a566a76` order page + New Order + history events
+  (migration `20261025090000_addon_events` applied to dev), `c1fe565` invoices + staff sheet, `3504cc6` content-editor mirror + specs.
+- **Verified:** tsc 0 · `test-pricing-model` 152/152 · i18n parity OK · `test-ordermasterclass-rls` 14/14 · QA specs (untracked,
+  `tests/_qa/addons-public|admin.spec.ts`, config `playwright.qa3100.config.ts` — localhost:3100 because MaxFinances holds 3000) 9/9 ·
+  `booking-tampered-quantities` 9/9 · `booking-enhanced` pass · `admin-orders` pass. Screenshots `saas/tests/_qa/shots/addons/`.
+- **Decisions taken while building:** model names not renamed (screens say Add-ons); G-1 built as "yes" (every form shows the groups
+  the admin ticked for that audience); per-person is charged per paying guest on EVERY path (the old public form charged the typed
+  quantity, default 1 — release-note item, customer-visible); individuals with no price table keep their add-ons in the total.
+- **Mistake of mine, fixed:** my test item "Extra khachapuri" would have shown up inside the old Masterclass row on staging (shared DB,
+  old code lists every active item) — switched it off at once; it is back on now because the new code groups it (staging old code would
+  show it again until the push). Dev DB backups: automatic before each write command + one manual before the UI tests.
+- **Next:** Part B (wine on bookings, T-22) — schema (bookable switch, wine lines on a booking, `lineTotal`, guest-purchase link), company
+  table-wine terms, public "Wine for the table" row, order page card, invoice, statistics, guest purchases. Then a hand-over review
+  card on T-7/T-22 and Max's click-through on localhost:3100.
+
+---
+
 ## 2026-10-24 (late) — T-215 pre-production: tier 5 back to 7/7, release-note screenshots taken (staging only, nothing on production)
 
 - Took over from `vault/Handoff-T215-Production.md`. Max: "you're in charge of the process, proceed" — read as the go for the
@@ -82,6 +134,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
   logged out → login, super-admin sign-in → `/super-admin`, releases/tenants/tickets 200, winery-domain login still 200.
   Workaround until shipped: use `nikalasmarani.vineworks.ge/super-admin`. **On staging only** — production needs Max's go.
   Note: sessions are per domain, so signing in on `www.vineworks.ge` is a separate login from `nikalasmarani.vineworks.ge`.
+  **T-298 IS NOW ON PRODUCTION** (Max: "push too if its a simple fix why not push to prod"): `master` `a668954 → dd90e93`
+  (`dpl_A62hWyz1L1kUGCLAXemD3uUzUTm2`). Live check by curl: `vineworks.ge/admin`, `vineworks.ge/super-admin`,
+  `www.vineworks.ge/admin/login` all end on `www.vineworks.ge/admin/login` = **200** with the password form (was 500); winery login
+  still 200; no new runtime errors on the new deployment (the old error group only grew from Claude's own polling before the deploy
+  went live). `tix ship T-298 --yes-prod` done. Not signed in on the live platform domain by Claude (Max's own login). Vault also
+  updated for a context clear: Roadmap v1.19, Plan-OrderPageMirror status, FeatureLog #238/#239, MEMORY.md "State at the end of 2026-10-24".
 
 ---
 

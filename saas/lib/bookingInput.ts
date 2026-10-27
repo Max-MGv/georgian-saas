@@ -12,6 +12,7 @@
  */
 import { countsFromVisit, payingGuests, PRODUCTS, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
 import { rulesVisitType } from '@/lib/bookingHours'
+import { groupShownOn } from '@/lib/addOns'
 
 /** Upper bound for any single count or quantity. Generous — the forms cap guests at 200. */
 export const MAX_COUNT = 999
@@ -229,27 +230,68 @@ export function checkAdminOrder(input: {
 
 // ─── Masterclass lines ───────────────────────────────────────────────────────
 
-export type MasterclassCatalogueRow = { id: string; unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'; active: boolean; pricePerUnit: number }
+/** One catalogue row. `name` / `nameKa` / `group` are only needed by callers that STORE the line (they become its snapshot). */
+export type MasterclassCatalogueRow = {
+  id: string
+  unitType: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
+  active: boolean
+  pricePerUnit: number
+  name?: string
+  nameKa?: string | null
+  group?: {
+    id: string; nameEn: string; nameKa: string | null
+    // Needed only when the caller asks for the visibility check (public booking): who sees the group, and on which visits.
+    active?: boolean; showToCompanies?: boolean; showToIndividuals?: boolean; visitTypes?: string[]
+  } | null
+}
+/** The Prisma `select` every caller that stores add-on lines uses, so the snapshot can never be half-filled. */
+export const MASTERCLASS_CATALOGUE_SELECT = {
+  id: true, name: true, nameKa: true, unitType: true, active: true, pricePerUnit: true,
+  group: { select: { id: true, nameEn: true, nameKa: true, active: true, showToCompanies: true, showToIndividuals: true, visitTypes: true } },
+} as const
 export type MasterclassLineIn = { masterclassItemId?: unknown; quantity?: unknown }
-export type MasterclassLineOut = { masterclassItemId: string; quantity: number; pricePerUnit: number }
+/** What is copied onto a stored line so renaming / deleting the item or group later never changes an invoice (E5, #94). */
+export type MasterclassLineSnapshot = {
+  nameSnapshot: string | null
+  nameKaSnapshot: string | null
+  unitSnapshot: 'PER_PERSON' | 'PER_PIECE' | 'FLAT'
+  groupId: string | null
+  groupNameSnapshot: string | null
+  groupNameKaSnapshot: string | null
+}
+export type MasterclassLineOut = { masterclassItemId: string; quantity: number; pricePerUnit: number } & MasterclassLineSnapshot
 
 export type MasterclassError =
   | { code: 'not_a_list' }
   | { code: 'unknown_item' }
   | { code: 'inactive_item' }
+  /** The item's group is off, not offered to this kind of guest, or not offered on this visit type (T-7). */
+  | { code: 'hidden_group' }
   | { code: 'duplicate_item' }
   | { code: 'bad_quantity' }
+
+export type MasterclassCheckOptions = {
+  /**
+   * The booking's paying guests. When given, a PER_PERSON line's quantity IS this number — whatever the request said
+   * (Plan-AddOnsAndWine D-11 / G-2: "per person" is charged per paying guest, the guest never types it).
+   */
+  payingGuests?: number
+  /** Public bookings only: every line's group must be offered to this kind of guest on this visit type. */
+  shownOn?: { bookingType: 'INDIVIDUAL' | 'COMPANY'; visitType: string }
+}
 
 /**
  * Masterclass lines as they will be stored: every item must be this tenant's
  * (the caller passes only its own catalogue rows) and active; quantities whole
- * 1…999; FLAT items are always quantity 1; the price always comes from the
- * catalogue, never from the request. Any bad line refuses the whole booking —
- * silently dropping a line the guest saw priced would be its own surprise.
+ * 1…999; FLAT items are always quantity 1; PER_PERSON items are the paying guests
+ * (when the caller says how many); the price always comes from the catalogue, never
+ * from the request. Any bad line refuses the whole booking — silently dropping a
+ * line the guest saw priced would be its own surprise.
  */
 export function checkMasterclassLines(
   lines: unknown,
   catalogue: MasterclassCatalogueRow[],
+  opts: MasterclassCheckOptions = {},
 ): { ok: true; lines: MasterclassLineOut[] } | { ok: false; error: MasterclassError } {
   if (lines === undefined || lines === null) return { ok: true, lines: [] }
   if (!Array.isArray(lines)) return { ok: false, error: { code: 'not_a_list' } }
@@ -261,10 +303,32 @@ export function checkMasterclassLines(
     const item = byId.get(id)
     if (!item) return { ok: false, error: { code: 'unknown_item' } }
     if (!item.active) return { ok: false, error: { code: 'inactive_item' } }
+    if (opts.shownOn) {
+      const g = item.group
+      if (!g || !groupShownOn({ active: g.active ?? false, showToCompanies: g.showToCompanies ?? false, showToIndividuals: g.showToIndividuals ?? false, visitTypes: g.visitTypes ?? [] }, opts.shownOn.bookingType, opts.shownOn.visitType)) {
+        return { ok: false, error: { code: 'hidden_group' } }
+      }
+    }
     if (seen.has(id)) return { ok: false, error: { code: 'duplicate_item' } }
     seen.add(id)
-    if (!isCount(raw.quantity) || raw.quantity < 1) return { ok: false, error: { code: 'bad_quantity' } }
-    out.push({ masterclassItemId: id, quantity: item.unitType === 'FLAT' ? 1 : raw.quantity, pricePerUnit: item.pricePerUnit })
+    // FLAT is always 1 and a PER_PERSON line follows the guests when the caller knows them: for those the request's
+    // quantity is not used, so it is not validated either. Only a typed quantity (per piece, or per person with no
+    // guest count given) must be a whole number 1…999.
+    const serverSets = item.unitType === 'FLAT' || (item.unitType === 'PER_PERSON' && opts.payingGuests != null)
+    if (!serverSets && (!isCount(raw.quantity) || raw.quantity < 1)) return { ok: false, error: { code: 'bad_quantity' } }
+    const quantity = item.unitType === 'FLAT' ? 1 : item.unitType === 'PER_PERSON' && opts.payingGuests != null ? opts.payingGuests : (raw.quantity as number)
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_COUNT) return { ok: false, error: { code: 'bad_quantity' } }
+    out.push({
+      masterclassItemId: id,
+      quantity,
+      pricePerUnit: item.pricePerUnit,
+      nameSnapshot: item.name ?? null,
+      nameKaSnapshot: item.nameKa ?? null,
+      unitSnapshot: item.unitType,
+      groupId: item.group?.id ?? null,
+      groupNameSnapshot: item.group?.nameEn ?? null,
+      groupNameKaSnapshot: item.group?.nameKa ?? null,
+    })
   }
   return { ok: true, lines: out }
 }

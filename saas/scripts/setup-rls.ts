@@ -47,6 +47,8 @@ async function main() {
     'CompanyWinePrice',
     // Delivery zones (T-8). Own tenantId → also in tenantedTables below (H18: both lists).
     'DeliveryZone',
+    // Add-on groups (T-7). Own tenantId → also in tenantedTables below (H18: both lists).
+    'AddOnGroup',
     // Invoice history (2026-09-23) — an append-only snapshot of what an invoice email actually
     // said when sent, carrying its own tenantId exactly as OrderContact does despite being a
     // child of Order. See MaintenanceNotes on why this exists.
@@ -103,6 +105,8 @@ async function main() {
     'ContactRole', 'OrderContact', 'InvoiceSent',
     // Delivery zones (T-8) — also in writableTables above; its migration creates the same policy.
     'DeliveryZone',
+    // Add-on groups (T-7) — also in writableTables above; its migration creates the same policy.
+    'AddOnGroup',
   ]
 
   for (const t of tenantedTables) {
@@ -181,24 +185,18 @@ async function main() {
       );
   `)
 
-  // WineOrderItem: JOIN to WineOrder
-  console.log('Creating policy on "WineOrderItem" (JOIN to WineOrder)...')
+  // WineOrderItem: JOIN to WineOrder OR to Order (T-22: wine for the table belongs to a booking; also in migration 20261025120000)
+  console.log('Creating policy on "WineOrderItem" (JOIN to WineOrder or Order)...')
   await db.$executeRawUnsafe(`DROP POLICY IF EXISTS tenant_isolation ON "WineOrderItem";`)
   await db.$executeRawUnsafe(`
     CREATE POLICY tenant_isolation ON "WineOrderItem"
       USING (
-        EXISTS (
-          SELECT 1 FROM "WineOrder" wo
-          WHERE wo.id = "WineOrderItem"."wineOrderId"
-            AND wo."tenantId" = current_setting('app.tenant_id', true)
-        )
+        EXISTS (SELECT 1 FROM "WineOrder" wo WHERE wo.id = "WineOrderItem"."wineOrderId" AND wo."tenantId" = current_setting('app.tenant_id', true))
+        OR EXISTS (SELECT 1 FROM "Order" o WHERE o.id = "WineOrderItem"."orderId" AND o."tenantId" = current_setting('app.tenant_id', true))
       )
       WITH CHECK (
-        EXISTS (
-          SELECT 1 FROM "WineOrder" wo
-          WHERE wo.id = "WineOrderItem"."wineOrderId"
-            AND wo."tenantId" = current_setting('app.tenant_id', true)
-        )
+        EXISTS (SELECT 1 FROM "WineOrder" wo WHERE wo.id = "WineOrderItem"."wineOrderId" AND wo."tenantId" = current_setting('app.tenant_id', true))
+        OR EXISTS (SELECT 1 FROM "Order" o WHERE o.id = "WineOrderItem"."orderId" AND o."tenantId" = current_setting('app.tenant_id', true))
       );
   `)
 

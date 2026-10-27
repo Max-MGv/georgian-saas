@@ -49,6 +49,7 @@ export async function wipeStagingTenant(db: PrismaClient): Promise<{
   await db.company.deleteMany({ where: { tenantId: tid } })
   await db.menuItem.deleteMany({ where: { tenantId: tid } })
   await db.masterclassItem.deleteMany({ where: { tenantId: tid } })
+  await db.addOnGroup.deleteMany({ where: { tenantId: tid } }) // after its items (the item → group FK is RESTRICT)
   await db.setting.deleteMany({ where: { tenantId: tid, key: { in: ONBOARDING_KEYS } } })
 
   return {

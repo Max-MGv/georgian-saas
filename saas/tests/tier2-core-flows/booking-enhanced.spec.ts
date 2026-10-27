@@ -253,7 +253,8 @@ test.describe('Booking form — enhanced/company variant', () => {
     // tenant has real MenuItem/MasterclassItem rows — confirmed live, no
     // fixture seeding needed).
     await expect(page.getByText('Hot Dish Selection', { exact: true })).toBeVisible();
-    await expect(page.getByText('Masterclass Add-ons', { exact: true })).toBeVisible();
+    // T-7: each add-on group is its own row, titled with the winery's group name ("Masterclass" on this tenant).
+    await expect(page.getByText('Masterclass', { exact: true })).toBeVisible();
 
     // 6. A count above every row (31 > 30): the product takes the LAST row that offers it (Max 2026-10-23, dc0d79a —
     // "101 guests and max 100 → the 100 tier price"; gaps between rows keep A-7), so Tasting only is quoted at the
@@ -279,14 +280,13 @@ test.describe('Booking form — enhanced/company variant', () => {
     // folding class 35₾/pp, Churchkhela making 25₾/pp, Wine blending session
     // 45₾/pp, Qvevri cellar tour 60₾ flat) — confirmed live immediately
     // before writing this fix, not assumed from the original comment.
-    // Repointed at current fixtures; the masterclass checkbox defaults its
-    // own quantity to 1 regardless of unit type (BookingForm.tsx — "per
-    // person" is a *label*, it does not auto-multiply by guest count), so
-    // one checked "Khinkali folding class" item adds exactly 35₾.
+    // Repointed at current fixtures. Since T-7 a "per person" add-on IS multiplied by the paying guests on its own (the
+    // guest never types a quantity; the server sets it too), so one checked "Khinkali folding class" (35₾ per person)
+    // adds 35₾ × 8 paying guests = 280₾.
     const vegSelect = page.getByText('Vegetable dish', { exact: true }).locator('xpath=following-sibling::select');
     await vegSelect.selectOption({ label: 'Badrijani nigvzit' });
     // T-21: the masterclass list starts collapsed behind one summary row.
-    await page.getByRole('button', { name: /Add a masterclass/ }).click();
+    await page.getByRole('button', { name: /^Add Masterclass/ }).click();
     await page.getByRole('checkbox', { name: /Khinkali folding class/ }).check();
 
     // exact: true — Tbilisi Tour Collective has a guide on file, so the
@@ -304,9 +304,9 @@ test.describe('Booking form — enhanced/company variant', () => {
     await page.getByRole('textbox', { name: 'DD/MM/YYYY' }).fill(formatDate(tomorrow));
 
     // expect: each product on its own row by its own count (D-2): 5 Tasting only × 60₾ (1–10) + 3 Tasting &
-    // Lunch × 100₾ (1–10) = 600, plus the masterclass add-on already selected above (35, Khinkali folding
-    // class × qty 1) = 635, before submitting
-    await expect(page.getByText('635₾', { exact: false })).toBeVisible();
+    // Lunch × 100₾ (1–10) = 600, plus the masterclass add-on already selected above (Khinkali folding class,
+    // 35₾ per person × 8 paying guests = 280) = 880, before submitting
+    await expect(page.getByText('880₾', { exact: false })).toBeVisible();
 
     // Real finding, differs from the note's assumption: company bookings
     // (both simple and enhanced) never redirect to the Flitt payment
@@ -342,9 +342,10 @@ test.describe('Booking form — enhanced/company variant', () => {
     await expect(cells.nth(7)).toHaveText('3'); // Tasting & Lunch
     await expect(cells.nth(8)).toHaveText('Tasting + Lunch'); // Visit
     await expect(cells.nth(9)).toContainText('Khinkali'); // Masterclass
+    // (The Table wine column of T-22 is off by default, so it is not in this row.)
     await expect(cells.nth(10)).toContainText('Badrijani nigvzit'); // Food (hot dish)
     await expect(cells.nth(10)).toContainText('Playwright test notes');
-    await expect(cells.nth(11)).toHaveText('635₾'); // Total
+    await expect(cells.nth(11)).toHaveText('880₾'); // Total (600 + Khinkali 35₾ × 8 paying guests, T-7)
 
     // 9. Cleanup: delete the test order. (No company/price tier was created
     // by this test, so there's nothing else to remove, and the settings

@@ -44,6 +44,7 @@ async function cleanup() {
   await db.orderMasterclass.deleteMany({ where: { order: { tenantId: { in: [A, B] } } } })
   await db.order.deleteMany({ where: { tenantId: { in: [A, B] } } })
   await db.masterclassItem.deleteMany({ where: { tenantId: { in: [A, B] } } })
+  await db.addOnGroup.deleteMany({ where: { tenantId: { in: [A, B] } } })
   await db.tenant.deleteMany({ where: { id: { in: [A, B] } } })
 }
 
@@ -117,6 +118,39 @@ async function main() {
   check("Tenant A cannot delete tenant B's OrderMasterclass via deleteMany (RLS)", deleted.count === 0, `deleted ${deleted.count}`)
   const bStillExists = await db.orderMasterclass.findUnique({ where: { id: lineB.id } })
   check("Tenant B's OrderMasterclass still exists after the rejected cross-tenant delete attempt", bStillExists !== null)
+
+  // ── AddOnGroup (T-7): own tenantId → direct policy ──
+  const groupA = await withTenantDb(A, tx => tx.addOnGroup.create({ data: { tenantId: A, nameEn: 'ZZ Group A' } }))
+  const groupB = await withTenantDb(B, tx => tx.addOnGroup.create({ data: { tenantId: B, nameEn: 'ZZ Group B' } }))
+  const seenByA = await withTenantDb(A, tx => tx.addOnGroup.findMany({ where: { id: { in: [groupA.id, groupB.id] } } }))
+  check("Tenant A sees its own AddOnGroup and NOT tenant B's (RLS)", seenByA.length === 1 && seenByA[0].id === groupA.id)
+  const grpWrote = await withTenantDb(A, tx => tx.addOnGroup.updateMany({ where: { id: groupB.id }, data: { nameEn: 'hijacked' } }))
+  check("Tenant A cannot update tenant B's AddOnGroup (RLS)", grpWrote.count === 0)
+  let groupInsertRejected = false
+  try { await withTenantDb(A, tx => tx.addOnGroup.create({ data: { tenantId: B, nameEn: 'ZZ forged' } })) } catch { groupInsertRejected = true }
+  check('Creating an AddOnGroup for another tenant is rejected by WITH CHECK', groupInsertRejected)
+
+  // ── A line is a snapshot (KnownBugs #94): deleting the used item or its group must not delete or change the line ──
+  const snapLine = await withTenantDb(A, tx =>
+    tx.orderMasterclass.create({
+      data: {
+        orderId: orderA.id, masterclassItemId: itemA.id, quantity: 3, pricePerUnit: 15,
+        nameSnapshot: 'ZZ Item A', unitSnapshot: 'PER_PIECE', groupId: groupA.id, groupNameSnapshot: 'ZZ Group A',
+      },
+    }))
+  await withTenantDb(A, tx => tx.masterclassItem.deleteMany({ where: { id: itemA.id } }))
+  await withTenantDb(A, tx => tx.addOnGroup.deleteMany({ where: { id: groupA.id } }))
+  const afterDelete = await db.orderMasterclass.findUnique({ where: { id: snapLine.id } })
+  check('Deleting a used item succeeds and the line survives with its snapshot (#94)',
+    afterDelete !== null && afterDelete.masterclassItemId === null && afterDelete.nameSnapshot === 'ZZ Item A' && afterDelete.quantity === 3)
+  check('Deleting the group leaves the line with its group name snapshot', afterDelete?.groupId === null && afterDelete?.groupNameSnapshot === 'ZZ Group A')
+
+  // An item cannot be left pointing at a deleted group (RESTRICT): delete the group while an item is in it → refused.
+  const groupC = await withTenantDb(A, tx => tx.addOnGroup.create({ data: { tenantId: A, nameEn: 'ZZ Group C' } }))
+  await withTenantDb(A, tx => tx.masterclassItem.create({ data: { name: 'ZZ Item C', pricePerUnit: 5, tenantId: A, groupId: groupC.id } }))
+  let groupDeleteRefused = false
+  try { await withTenantDb(A, tx => tx.addOnGroup.delete({ where: { id: groupC.id } })) } catch { groupDeleteRefused = true }
+  check('A group that still has items cannot be deleted (ON DELETE RESTRICT)', groupDeleteRefused)
 
   await cleanup()
   console.log('\n──────────────────────────────────────────────────')

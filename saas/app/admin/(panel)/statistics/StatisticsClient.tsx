@@ -17,7 +17,7 @@ const C = {
 }
 
 type MonthData = { month: string; orders: number; revenue: number }
-type Order = { id: string; date: string; totalPrice: number; companyId: string | null; companyName: string | null }
+type Order = { id: string; date: string; totalPrice: number; tableWine: number; guestWine: number; companyId: string | null; companyName: string | null }
 type Company = { id: string; name: string }
 type Props = {
   bookingOn: boolean

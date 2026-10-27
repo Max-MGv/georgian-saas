@@ -20,10 +20,13 @@ import {
   ratesFromManualProducts, ratesFromProductSnapshot, totalGuests,
   type Counts, type ProductTier,
 } from '../lib/pricingUtils'
-import { guestSplitText, invoiceView } from '../lib/invoiceLines'
+import { addOnLabel, groupInvoiceAddOns, guestSplitText, invoiceView } from '../lib/invoiceLines'
 import { adminOrderView, visibleBoxes } from '../lib/adminOrderView'
 import { checkAdminOrder, checkBookingCounts, checkMasterclassLines, countRulesFromSettings, hotDishWithoutLunch, type CountRules, type CountRuleKey } from '../lib/bookingInput'
 import { getLeadHours, getVisitDurationMinutes, rulesVisitType } from '../lib/bookingHours'
+import { groupShownOn, localName, normalizeVisitTypes, visitTypesTicked } from '../lib/addOns'
+import { withSyncedQuantities } from '../lib/addOnLines'
+import { lineTotals } from '../lib/orderLines'
 
 let passed = 0, failed = 0
 function check(label: string, actual: unknown, expected: unknown) {
@@ -197,11 +200,77 @@ console.log('Input checks (#93)')
   check('masterclass: same item twice', mErr([{ masterclassItemId: 'pp', quantity: 1 }, { masterclassItemId: 'pp', quantity: 2 }]), 'duplicate_item')
   check('masterclass: not a list', mErr({ masterclassItemId: 'pp' }), 'not_a_list')
   const okLines = checkMasterclassLines([{ masterclassItemId: 'pp', quantity: 8, pricePerUnit: 0 }, { masterclassItemId: 'flat', quantity: 5 }], cat)
-  check('masterclass: price from the catalogue, FLAT forced to 1', okLines.ok && okLines.lines, [
+  check('masterclass: price from the catalogue, FLAT forced to 1', okLines.ok && okLines.lines.map(l => ({ masterclassItemId: l.masterclassItemId, quantity: l.quantity, pricePerUnit: l.pricePerUnit })), [
     { masterclassItemId: 'pp', quantity: 8, pricePerUnit: 3500 },
     { masterclassItemId: 'flat', quantity: 1, pricePerUnit: 6000 },
   ])
   check('masterclass: none sent', mErr(undefined), 'ok')
+
+  // ── Add-on groups (T-7): per person = the paying guests, visibility is checked on the server ──
+  const gOn = { id: 'g1', nameEn: 'Food', nameKa: null, active: true, showToCompanies: true, showToIndividuals: false, visitTypes: ['TASTING_LUNCH'] }
+  const catG = [
+    { id: 'pp', unitType: 'PER_PERSON' as const, active: true, pricePerUnit: 3500, name: 'Class', group: gOn },
+    { id: 'pc', unitType: 'PER_PIECE' as const, active: true, pricePerUnit: 1800, name: 'Khachapuri', group: gOn },
+    { id: 'off', unitType: 'PER_PIECE' as const, active: true, pricePerUnit: 100, name: 'In an off group', group: { ...gOn, active: false } },
+    { id: 'none', unitType: 'PER_PIECE' as const, active: true, pricePerUnit: 100, name: 'No group', group: null },
+  ]
+  const withGuests = (lines: unknown, shownOn?: { bookingType: 'INDIVIDUAL' | 'COMPANY'; visitType: string }) => checkMasterclassLines(lines, catG, { payingGuests: 10, shownOn })
+  const forged = withGuests([{ masterclassItemId: 'pp', quantity: 999 }])
+  check('add-ons: a forged per-person quantity is replaced by the paying guests', forged.ok && forged.lines[0].quantity, 10)
+  const noQty = withGuests([{ masterclassItemId: 'pp' }])
+  check('add-ons: a per-person line needs no quantity at all', noQty.ok && noQty.lines[0].quantity, 10)
+  const snap = withGuests([{ masterclassItemId: 'pc', quantity: 3 }])
+  check('add-ons: the line carries its snapshot', snap.ok && [snap.lines[0].nameSnapshot, snap.lines[0].unitSnapshot, snap.lines[0].groupId, snap.lines[0].groupNameSnapshot], ['Khachapuri', 'PER_PIECE', 'g1', 'Food'])
+  check('add-ons: a per-piece quantity is still validated', (() => { const r = withGuests([{ masterclassItemId: 'pc', quantity: -1 }]); return r.ok ? 'ok' : r.error.code })(), 'bad_quantity')
+  const vis = (id: string, bt: 'INDIVIDUAL' | 'COMPANY', vt: string) => { const r = withGuests([{ masterclassItemId: id, quantity: 1 }], { bookingType: bt, visitType: vt }); return r.ok ? 'ok' : r.error.code }
+  check('add-ons: offered to companies on its visit type', vis('pc', 'COMPANY', 'TASTING_LUNCH'), 'ok')
+  check('add-ons: refused for individuals when the group is companies-only', vis('pc', 'INDIVIDUAL', 'TASTING_LUNCH'), 'hidden_group')
+  check('add-ons: refused on a visit type the group excludes', vis('pc', 'COMPANY', 'TASTING'), 'hidden_group')
+  check('add-ons: refused when the group is switched off', vis('off', 'COMPANY', 'TASTING_LUNCH'), 'hidden_group')
+  check('add-ons: refused when the item has no group', vis('none', 'COMPANY', 'TASTING_LUNCH'), 'hidden_group')
+  check('add-ons: the admin path has no visibility check', withGuests([{ masterclassItemId: 'off', quantity: 2 }]).ok, true)
+  check('add-ons: per person with no paying guests is refused', (() => { const r = checkMasterclassLines([{ masterclassItemId: 'pp' }], catG, { payingGuests: 0 }); return r.ok ? 'ok' : r.error.code })(), 'bad_quantity')
+
+  check('visit types: all three ticked = every type', normalizeVisitTypes(['LUNCH', 'TASTING', 'TASTING_LUNCH']), [])
+  check('visit types: a subset is kept in canonical order', normalizeVisitTypes(['TASTING_LUNCH', 'TASTING']), ['TASTING', 'TASTING_LUNCH'])
+  check('visit types: none is refused', normalizeVisitTypes([]), null)
+  check('visit types: an unknown value is refused', normalizeVisitTypes(['TASTING', 'BRUNCH']), null)
+  check('visit types: empty stored list shows all three ticked', visitTypesTicked([]), ['TASTING', 'TASTING_LUNCH', 'LUNCH'])
+  const gv = { active: true, showToCompanies: true, showToIndividuals: false, visitTypes: [] as string[] }
+  check('group: no visit types stored = every visit type', groupShownOn(gv, 'COMPANY', 'LUNCH'), true)
+  check('group: a group the winery switched off is never shown', groupShownOn({ ...gv, active: false }, 'COMPANY', 'TASTING'), false)
+  check('group: Georgian falls back to English when empty', [localName('Food', null, 'ka'), localName('Food', '  ', 'ka'), localName('Food', 'საჭმელი', 'ka'), localName('Food', 'საჭმელი', 'en')], ['Food', 'Food', 'საჭმელი', 'Food'])
+
+  // Per-person lines follow the guests (D-11)
+  const stored = [
+    { id: 'a', quantity: 10, pricePerUnit: 3500, unitSnapshot: 'PER_PERSON' as const, nameSnapshot: 'Class' },
+    { id: 'b', quantity: 4, pricePerUnit: 1800, unitSnapshot: 'PER_PIECE' as const, nameSnapshot: 'Khachapuri' },
+    { id: 'c', quantity: 1, pricePerUnit: 6000, unitSnapshot: 'FLAT' as const, nameSnapshot: 'Tour' },
+  ]
+  const synced = withSyncedQuantities(stored, 12)
+  check('sync: only the per-person line moves', synced.lines.map(l => l.quantity), [12, 4, 1])
+  check('sync: the change is reported for the history', synced.changed, [{ id: 'a', name: 'Class', from: 10, to: 12 }])
+  check('sync: nothing to do when the guests did not change', withSyncedQuantities(stored, 10).changed.length, 0)
+  check('sync: the total follows (10 → 12 guests = +₾70)', lineTotals({ masterclassLines: synced.lines, extras: [], wineLines: [] }).masterclass - lineTotals({ masterclassLines: stored, extras: [], wineLines: [] }).masterclass, 2 * 3500)
+  const preview = (paying: string) => adminOrderView({ bookingType: 'COMPANY', visitType: 'TASTING', guests: '0', boxes: { tastingOnly: paying, lunchOnly: '0', tastingLunch: '0', free: '0' },
+    prices: [{ minGuests: 1, maxGuests: 99, tastingOnlyPrice: 5000, lunchOnlyPrice: null, tastingLunchPrice: 8000 }], registration: 0, manual: { tastingOnly: '', lunchOnly: '', tastingLunch: '' },
+    addOnLines: [{ quantity: 1, pricePerUnit: 3500, unit: 'PER_PERSON' }, { quantity: 4, pricePerUnit: 1800, unit: 'PER_PIECE' }, { quantity: 1, pricePerUnit: 6000, unit: 'FLAT' }], extrasAmt: 0 })
+  check('admin preview: per person is charged at the guests being typed', [preview('10').addOnAmt, preview('12').addOnAmt], [10 * 3500 + 4 * 1800 + 6000, 12 * 3500 + 4 * 1800 + 6000])
+  check('admin preview: the total includes them', preview('10').total, 10 * 5000 + 10 * 3500 + 4 * 1800 + 6000)
+
+  // Invoices: one section per group, names as sold, Georgian where the winery gave one, old rows still readable.
+  const inv = [
+    { name: 'Khinkali class', nameKa: 'ხინკლის კლასი', groupName: 'Masterclass', groupNameKa: 'მასტერკლასი', quantity: 12, pricePerUnit: 3500 },
+    { name: 'Khachapuri', nameKa: null, groupName: 'Food', groupNameKa: null, quantity: 4, pricePerUnit: 1800 },
+    { name: 'Cellar tour', nameKa: null, groupName: 'Masterclass', groupNameKa: 'მასტერკლასი', quantity: 1, pricePerUnit: 6000 },
+    { name: 'Old row', quantity: 1, pricePerUnit: 100 },
+  ]
+  const en = groupInvoiceAddOns(inv, 'en', 'Add-ons')
+  check('invoice: groups in order of first appearance', en.map(g => [g.title, g.lines.length]), [['Masterclass', 2], ['Food', 1], ['Add-ons', 1]])
+  const ka = groupInvoiceAddOns(inv, 'ka', 'დამატებითი სერვისები')
+  check('invoice (Georgian): group and item names in Georgian where given, English otherwise', [ka[0].title, addOnLabel(inv[0], 'ka'), addOnLabel(inv[1], 'ka'), ka[1].title], ['მასტერკლასი', 'ხინკლის კლასი × 12', 'Khachapuri × 4', 'Food'])
+  check('invoice: the English invoice never shows Georgian', addOnLabel(inv[0], 'en'), 'Khinkali class × 12')
+  check('invoice: a line with no group (old invoice) goes under the fallback title', en[2].lines[0].name, 'Old row')
 }
 
 console.log('Equivalence — every real order keeps its money after conversion (A-2)')

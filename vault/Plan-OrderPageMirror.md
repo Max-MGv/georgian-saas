@@ -4,7 +4,7 @@ tags: [plan, admin, orders, T-215]
 
 # Plan — the order page mirrors the booking form (T-215, part 2)
 
-**Status:** ✅ On staging 2026-10-24 (`d495774`, T-215 Ready to test; tier-5 post-payment-extras passed on staging) (Max: "go ahead and build that" — all recommendations taken: company
+**Status:** ✅ **ON PRODUCTION since 2026-10-24** (master `1a34c4e`; staging check by Claude in Brave, tier 5 7/7, live read-only check, release note draft on the production board). Earlier: on staging 2026-10-24 (`d495774`, T-215 Ready to test; tier-5 post-payment-extras passed on staging) (Max: "go ahead and build that" — all recommendations taken: company
 changeable before payment, one Name box, lines edited in place, day-first dates). Testing → staging → T-215 review card.
 
 **What was built:**

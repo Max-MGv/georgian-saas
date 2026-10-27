@@ -1,9 +1,13 @@
 import { db, withTenantDb } from '@/lib/db'
 import { getTenantId } from '@/lib/tenant'
+import { lineIdentity, wineLineCost } from '@/lib/orderLines'
+import { localName } from '@/lib/addOns'
 import { notFound } from 'next/navigation'
 import { headers } from 'next/headers'
 import Link from 'next/link'
 import OrderDetail from './OrderDetail'
+import GuestSales from './GuestSales'
+import { wineLineAmount } from '@/lib/winePricing'
 import { getSetting } from '@/app/actions/settings'
 import { adminT } from '@/lib/adminT'
 import { orderRolesFor } from '@/lib/contactResolution'
@@ -19,15 +23,18 @@ export default async function OrderDetailPage({
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
 
-  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags] = await Promise.all([
+  const wineOn = h.get('x-tenant-modules-wine-orders') === 'true'
+  const [order, companies, menuItems, masterclassItems, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, adminLanguage, individuals, contactRoles, tenantFlags, bookableWines, guestPurchases, sellableWines] = await Promise.all([
     withTenantDb(tenantId, tx => tx.order.findFirst({
       where: { id, tenantId },
       include: {
-        company: { include: { prices: true } },
+        // winePrices: the company's agreed wine prices, which price any bottle added to this booking (T-22).
+        company: { include: { prices: true, winePrices: true } },
         masterclassLines: {
           include: { masterclassItem: true },
           orderBy: { id: 'asc' },
         },
+        wineLines: { orderBy: { createdAt: 'asc' } },
         extras: { orderBy: { id: 'asc' } },
         contacts: { include: { role: true }, orderBy: { role: { sortOrder: 'asc' } } },
         invoicesSent: { orderBy: { sentAt: 'desc' } },
@@ -61,7 +68,8 @@ export default async function OrderDetailPage({
     })),
     withTenantDb(tenantId, tx => tx.masterclassItem.findMany({
       where: { active: true, tenantId },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ group: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+      include: { group: { select: { nameEn: true, nameKa: true, active: true } } },
     })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -76,6 +84,30 @@ export default async function OrderDetailPage({
     orderRolesFor(tenantId, 'BOOKING'),
     // Through `db`: Tenant has RLS with no policies, so withTenantDb would return null (MaintenanceNotes §27).
     db.tenant.findUnique({ where: { id: tenantId }, select: { enableCompanyNationalityBreakdown: true } }),
+    // Wines switched on for bookings (T-22) — only when the wine module is on.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+          where: { tenantId, bookable: true, active: true, wine: { active: true } },
+          orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+          select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true } } },
+        }))
+      : Promise.resolve([]),
+    // Sales from this visit (T-22): wine orders linked to this booking. Abandoned checkouts are not sales.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineOrder.findMany({
+          where: { tenantId, sourceOrderId: id, abandonedAt: null },
+          include: { wineItems: true },
+          orderBy: { createdAt: 'asc' },
+        }))
+      : Promise.resolve([]),
+    // A guest buys anything the winery sells, not only what is offered on bookings.
+    wineOn
+      ? withTenantDb(tenantId, tx => tx.wineVintage.findMany({
+          where: { tenantId, active: true, wine: { active: true } },
+          orderBy: [{ wine: { sortOrder: 'asc' } }, { year: 'desc' }],
+          select: { id: true, year: true, price: true, wine: { select: { name: true, nameKa: true } } },
+        }))
+      : Promise.resolve([]),
   ])
 
   if (!order) notFound()
@@ -174,18 +206,36 @@ export default async function OrderDetailPage({
                 registrationFee: order.company.registrationFee,
               }
             : null,
-          masterclassLines: order.masterclassLines.map(l => ({
+          // The line's own snapshot first: an item deleted since (or renamed) must not change what this order says.
+          masterclassLines: order.masterclassLines.map(l => {
+            const who = lineIdentity(l)
+            return {
+              id: l.id,
+              masterclassItemId: l.masterclassItemId ?? '',
+              quantity: l.quantity,
+              pricePerUnit: l.pricePerUnit,
+              groupName: localName(who.groupName ?? '', who.groupNameKa, adminLanguage || 'en') || null,
+              nameKa: who.nameKa,
+              groupNameKa: who.groupNameKa,
+              masterclassItem: {
+                id: l.masterclassItem?.id ?? '',
+                name: localName(who.name, who.nameKa, adminLanguage || 'en'),
+                unitType: who.unit,
+                pricePerUnit: l.masterclassItem?.pricePerUnit ?? l.pricePerUnit,
+                active: l.masterclassItem?.active ?? false,
+              },
+            }
+          }),
+          wineLines: order.wineLines.map(l => ({
             id: l.id,
-            masterclassItemId: l.masterclassItemId,
+            wineVintageId: l.wineVintageId,
+            name: l.wineNameSnapshot,
+            year: l.vintageYearSnapshot,
             quantity: l.quantity,
-            pricePerUnit: l.pricePerUnit,
-            masterclassItem: {
-              id: l.masterclassItem.id,
-              name: l.masterclassItem.name,
-              unitType: l.masterclassItem.unitType,
-              pricePerUnit: l.masterclassItem.pricePerUnit,
-              active: l.masterclassItem.active,
-            },
+            priceSnapshot: l.priceSnapshot,
+            negotiated: l.negotiated,
+            discountPercent: l.discountPercent,
+            lineTotal: wineLineCost(l),
           })),
           extras: order.extras.map(e => ({
             id: e.id,
@@ -215,12 +265,32 @@ export default async function OrderDetailPage({
           name: i.name,
           type: i.type,
         }))}
+        wineOptions={bookableWines.map(v => ({ vintageId: v.id, name: localName(v.wine.name, v.wine.nameKa, locale), year: v.year, price: v.price }))}
+        guestSales={wineOn ? (
+          <GuestSales
+            orderId={order.id}
+            defaultName={`${order.name} ${order.surname}`.trim()}
+            locale={locale}
+            purchases={guestPurchases.map(p => ({
+              id: p.id,
+              name: p.businessName,
+              stage: p.stage,
+              amount: p.totalAmount ?? p.wineItems.reduce((s, i) => s + wineLineAmount(i, p.discountPercent), 0),
+              lines: p.wineItems.map(i => ({ name: i.wineNameSnapshot, year: i.vintageYearSnapshot, quantity: i.quantity })),
+            }))}
+            wines={sellableWines.map(v => ({ vintageId: v.id, name: localName(v.wine.name, v.wine.nameKa, locale), year: v.year, price: v.price }))}
+          />
+        ) : null}
+        wineTerms={order.bookingType === 'COMPANY' && order.company
+          ? { discountPercent: order.company.wineDiscountPercent, prices: Object.fromEntries(order.company.winePrices.map(p => [p.wineVintageId, p.price])) }
+          : null}
         masterclassItems={masterclassItems.map(i => ({
           id: i.id,
-          name: i.name,
+          name: localName(i.name, i.nameKa, locale),
           unitType: i.unitType,
           pricePerUnit: i.pricePerUnit,
           active: i.active,
+          groupName: i.group ? localName(i.group.nameEn, i.group.nameKa, locale) : null,
         }))}
       />
     </div>

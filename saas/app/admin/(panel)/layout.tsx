@@ -85,7 +85,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { href: '/admin/wines', label: at('nav.wines'), show: wineOrdersOn },
             { href: '/admin/wine-orders', label: at('nav.wineOrders'), show: wineOrdersOn },
             { href: '/admin/menu-items', label: at('nav.menuItems'), show: bookingOn },
-            { href: '/admin/masterclass', label: at('nav.masterclass'), show: bookingOn },
+            { href: '/admin/add-ons', label: at('nav.addons'), show: bookingOn },
             { href: '/admin/content', label: at('nav.content'), show: true },
             { href: '/admin/settings', label: at('nav.settings'), show: true },
             { href: '/admin/my-reports', label: at('nav.myReports'), show: true },

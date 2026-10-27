@@ -39,14 +39,20 @@ const selectStyle: React.CSSProperties = {
   outline: 'none',
 }
 
+/** One wine sale (lib/wineSales.ts): a wine order, a guest purchase from a visit, or wine for the table on a booking. */
 export type WineOrderStat = {
   id: string
   businessName: string
-  wines: { id: string; name: string; quantity: number; price?: number }[]
+  source: 'order' | 'guest' | 'table'
+  /** `id` = the vintage (so a wine is one wine in every language); `amount` = tetri this line cost, % and agreed price included. */
+  wines: { id: string; name: string; quantity: number; amount: number }[]
   displayTotal: number
-  stage: string
+  /** Delivery stage; null for table wine (nothing is delivered). */
+  stage: string | null
   createdAt: string
 }
+
+const SOURCES = ['order', 'table', 'guest'] as const
 
 function Card({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -96,6 +102,7 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [selectedMonth, setSelectedMonth] = useState<number | ''>('')
   const [selectedCustomer, setSelectedCustomer] = useState('')
+  const [selectedSource, setSelectedSource] = useState<'' | typeof SOURCES[number]>('')
   const [wineChartMode, setWineChartMode] = useState<WineChartMode>('bar')
   const [selectedWines, setSelectedWines] = useState<Set<string>>(new Set())
 
@@ -115,36 +122,49 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
     if (d.getFullYear() !== selectedYear) return false
     if (selectedMonth !== '' && d.getMonth() !== selectedMonth) return false
     if (selectedCustomer && o.businessName !== selectedCustomer) return false
+    if (selectedSource && o.source !== selectedSource) return false
     return true
-  }), [orders, selectedYear, selectedMonth, selectedCustomer])
+  }), [orders, selectedYear, selectedMonth, selectedCustomer, selectedSource])
 
-  // Orders filtered only by year + customer — used for the trend chart
+  // Orders filtered only by year + customer + source — used for the trend chart
   const yearOrders = useMemo(() => orders.filter(o => {
     if (new Date(o.createdAt).getFullYear() !== selectedYear) return false
     if (selectedCustomer && o.businessName !== selectedCustomer) return false
+    if (selectedSource && o.source !== selectedSource) return false
     return true
-  }), [orders, selectedYear, selectedCustomer])
+  }), [orders, selectedYear, selectedCustomer, selectedSource])
 
-  // All wine names present in the selected year (for trend toggles)
-  const allWineNames = useMemo(() => {
+  // The Source filter only appears once there is wine sold anywhere but wine orders.
+  const sourcesPresent = useMemo(() => SOURCES.filter(s => orders.some(o => o.source === s)), [orders])
+
+  // Wines are told apart by vintage id, never by name: the same wine under two names (language, a rename) used to be two bars,
+  // and the revenue summed each line's own amount instead of quantity × the bottle price (KnownBugs #95: the % was ignored).
+  const wineLabels = useMemo(() => {
+    const m: Record<string, string> = {}
+    orders.forEach(o => o.wines.forEach(w => { if (!m[w.id]) m[w.id] = w.name }))
+    return m
+  }, [orders])
+
+  // All wines sold in the selected year (for trend toggles), most bottles first
+  const allWineIds = useMemo(() => {
     const counts: Record<string, number> = {}
     yearOrders.forEach(o => o.wines.forEach(w => {
-      counts[w.name] = (counts[w.name] ?? 0) + w.quantity
+      counts[w.id] = (counts[w.id] ?? 0) + w.quantity
     }))
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name]) => name)
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([id]) => id)
   }, [yearOrders])
 
   // Stable color map for wines
   const wineColorMap = useMemo(() => {
     const map: Record<string, string> = {}
-    allWineNames.forEach((name, i) => { map[name] = WINE_LINE_COLORS[i % WINE_LINE_COLORS.length] })
+    allWineIds.forEach((id, i) => { map[id] = WINE_LINE_COLORS[i % WINE_LINE_COLORS.length] })
     return map
-  }, [allWineNames])
+  }, [allWineIds])
 
-  // Default: select top 4 wines when year changes or wine names change
+  // Default: select top 4 wines when year changes or wines change
   useEffect(() => {
-    setSelectedWines(new Set(allWineNames.slice(0, 4)))
-  }, [allWineNames])
+    setSelectedWines(new Set(allWineIds.slice(0, 4)))
+  }, [allWineIds])
 
   function toggleWine(name: string) {
     setSelectedWines(prev => {
@@ -157,7 +177,8 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
   // Summary stats
   const totalOrders = filtered.length
   const totalRevenue = Math.round(filtered.reduce((s, o) => s + o.displayTotal, 0))
-  const activeOrders = filtered.filter(o => o.stage !== 'DELIVERED' && o.stage !== 'CANCELLED').length
+  // Table wine has no delivery stage (stage null) — it is never "waiting to be delivered".
+  const activeOrders = filtered.filter(o => o.stage !== null && o.stage !== 'DELIVERED' && o.stage !== 'CANCELLED').length
   const avgOrder = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0
 
   // Revenue by period
@@ -190,9 +211,9 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
     const map: Record<string, { name: string; bottles: number; revenue: number }> = {}
     filtered.forEach(o => {
       o.wines.forEach(w => {
-        if (!map[w.name]) map[w.name] = { name: w.name, bottles: 0, revenue: 0 }
-        map[w.name].bottles += w.quantity
-        map[w.name].revenue += w.quantity * (w.price ?? 0)
+        if (!map[w.id]) map[w.id] = { name: wineLabels[w.id] ?? w.name, bottles: 0, revenue: 0 }
+        map[w.id].bottles += w.quantity
+        map[w.id].revenue += w.amount
       })
     })
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 8)
@@ -203,14 +224,14 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
     return MONTH_LABELS.map((label, monthIdx) => {
       const monthOrders = yearOrders.filter(o => new Date(o.createdAt).getMonth() === monthIdx)
       const entry: Record<string, number | string> = { month: label }
-      allWineNames.forEach(name => {
+      allWineIds.forEach(id => {
         let qty = 0
-        monthOrders.forEach(o => o.wines.forEach(w => { if (w.name === name) qty += w.quantity }))
-        entry[name] = qty
+        monthOrders.forEach(o => o.wines.forEach(w => { if (w.id === id) qty += w.quantity }))
+        entry[id] = qty
       })
       return entry
     })
-  }, [yearOrders, allWineNames])
+  }, [yearOrders, allWineIds])
 
   // Top customers
   const topCustomers = useMemo(() => {
@@ -282,9 +303,18 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
             locale={locale}
           />
         </div>
-        {(selectedMonth !== '' || selectedCustomer) && (
+        {sourcesPresent.length > 1 && (
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: C.muted, marginBottom: 4 }}>{at('statistics.filters.source')}</label>
+            <select value={selectedSource} onChange={e => setSelectedSource(e.target.value as '' | typeof SOURCES[number])} style={selectStyle}>
+              <option value="">{at('statistics.source.all')}</option>
+              {sourcesPresent.map(s => <option key={s} value={s}>{at(`statistics.source.${s}`)}</option>)}
+            </select>
+          </div>
+        )}
+        {(selectedMonth !== '' || selectedCustomer || selectedSource) && (
           <button
-            onClick={() => { setSelectedMonth(''); setSelectedCustomer('') }}
+            onClick={() => { setSelectedMonth(''); setSelectedCustomer(''); setSelectedSource('') }}
             className="text-sm px-3 py-2 rounded-lg"
             style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
           >
@@ -349,18 +379,19 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
 
         {/* Trend mode */}
         {wineChartMode === 'trend' && (
-          allWineNames.length === 0 ? (
+          allWineIds.length === 0 ? (
             <p className="text-sm text-center py-10" style={{ color: C.faint }}>{at('statistics.noDataForYear', { year: selectedYear })}</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2 mb-4">
-                {allWineNames.map(name => {
-                  const isOn = selectedWines.has(name)
-                  const color = wineColorMap[name]
+                {allWineIds.map(id => {
+                  const name = wineLabels[id]
+                  const isOn = selectedWines.has(id)
+                  const color = wineColorMap[id]
                   return (
                     <button
-                      key={name}
-                      onClick={() => toggleWine(name)}
+                      key={id}
+                      onClick={() => toggleWine(id)}
                       className="flex items-center gap-1.5 rounded-full transition-all duration-150"
                       style={{
                         fontSize: '0.72rem',
@@ -401,14 +432,15 @@ export default function WineStatistics({ orders, locale = 'en' }: { orders: Wine
                         {...tooltipStyle}
                         formatter={(v: unknown, name: unknown) => [`${Number(v)} ${Number(v) !== 1 ? at('statistics.bottle.plural') : at('statistics.bottle.singular')}`, String(name ?? '')]}
                       />
-                      {Array.from(selectedWines).map(name => (
+                      {Array.from(selectedWines).map(id => (
                         <Line
-                          key={name}
+                          key={id}
                           type="monotone"
-                          dataKey={name}
-                          stroke={wineColorMap[name]}
+                          dataKey={id}
+                          name={wineLabels[id]}
+                          stroke={wineColorMap[id]}
                           strokeWidth={2}
-                          dot={{ r: 3, fill: wineColorMap[name], strokeWidth: 0 }}
+                          dot={{ r: 3, fill: wineColorMap[id], strokeWidth: 0 }}
                           activeDot={{ r: 5, strokeWidth: 0 }}
                         />
                       ))}

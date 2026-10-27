@@ -541,14 +541,17 @@ function AddressesSection({ companyId, addresses, setAddresses, locale, zones }:
   )
 }
 
-/** One vintage as the price list needs it (T-12). `price` is the standard price, tetri. */
-type VintageLite = { id: string; label: string; price: number }
+/** One vintage as the price list needs it (T-12). `price` is the standard price, tetri; `wineId` / `wineName` / `year` group the list by wine. */
+type VintageLite = { id: string; label: string; wineId: string; wineName: string; year: number; price: number }
 
 /**
  * Negotiated prices (T-12, vault/Plan-WineOrderFeatures.md Chunk 9) — every active vintage with
  * its standard price greyed; type a price to negotiate it (bold), clear it or press "Standard"
  * to go back. Exceptions only: only typed prices are stored. Saves per row, live, like the
  * addresses and people lists.
+ *
+ * Grows with wines × years, so (Max, 2026-10-25) the whole section is collapsed until opened, and inside it the vintages sit
+ * under their wine (Rkatsiteli → 2023, 2026…). A wine that already has an agreed price starts open; the rest start closed.
  */
 function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
   companyId: string
@@ -561,6 +564,17 @@ function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [sectionOpen, setSectionOpen] = useState(false)
+
+  // The vintages under their wine, in the order the wines come (the list is already sorted by the winery's wine order, newest year first).
+  const groups: { id: string; name: string; items: VintageLite[] }[] = []
+  for (const v of vintages) {
+    const g = groups.find(x => x.id === v.wineId)
+    if (g) g.items.push(v); else groups.push({ id: v.wineId, name: v.wineName, items: [v] })
+  }
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(groups.filter(g => g.items.some(v => prices[v.id] !== undefined)).map(g => [g.id, true])))
+  const agreedTotal = vintages.filter(v => prices[v.id] !== undefined).length
 
   async function save(vintageId: string, text: string) {
     const trimmed = text.trim()
@@ -582,16 +596,38 @@ function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.winePrices.title')}</p>
+        <button type="button" onClick={() => setSectionOpen(o => !o)} aria-expanded={sectionOpen}
+          className="flex items-center gap-2 text-left" data-testid="wine-prices-toggle">
+          <span aria-hidden="true" className="text-xs w-3" style={{ color: C.faint }}>{sectionOpen ? '▾' : '▸'}</span>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.winePrices.title')}</span>
+          <span className="text-xs" style={{ color: agreedTotal > 0 ? C.wine : C.faint, fontWeight: agreedTotal > 0 ? 600 : 400 }}>
+            {agreedTotal > 0 ? adminT(locale, 'companies.winePrices.agreedCount', { n: agreedTotal }) : at('companies.winePrices.noneAgreed')}
+          </span>
+        </button>
         <HelpHint text={at('companies.winePrices.hint')} />
       </div>
       {error && <p className="text-xs" style={{ color: '#b91c1c' }}>{error}</p>}
-      {vintages.map(v => {
+      {sectionOpen && groups.map(g => {
+        const groupOpen = openGroups[g.id] === true
+        const groupAgreed = g.items.filter(v => prices[v.id] !== undefined).length
+        return (
+          <div key={g.id} className="rounded-lg border" style={{ borderColor: C.border }}>
+            <button type="button" onClick={() => setOpenGroups(o => ({ ...o, [g.id]: !groupOpen }))} aria-expanded={groupOpen}
+              data-testid={`wine-group-${g.id}`} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm">
+              <span aria-hidden="true" className="text-xs w-3" style={{ color: C.faint }}>{groupOpen ? '▾' : '▸'}</span>
+              <span className="min-w-0 flex-1 break-words font-medium" style={{ color: C.text }}>{g.name}</span>
+              {groupAgreed > 0 && (
+                <span className="text-xs font-semibold" style={{ color: C.wine }}>{adminT(locale, 'companies.winePrices.agreedCount', { n: groupAgreed })}</span>
+              )}
+            </button>
+            {groupOpen && (
+              <div className="flex flex-col gap-2 px-3 pb-3">
+                {g.items.map(v => {
         const negotiated = prices[v.id]
         const draft = drafts[v.id] ?? (negotiated !== undefined ? String(toMajor(asTetri(negotiated))) : '')
         return (
           <div key={v.id} className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="min-w-0 flex-1 break-words" style={{ color: C.text, fontWeight: negotiated !== undefined ? 600 : 400 }}>{v.label}</span>
+            <span className="min-w-0 flex-1 break-words" style={{ color: C.text, fontWeight: negotiated !== undefined ? 600 : 400 }}>{v.year}</span>
             <span className="text-xs" style={{ color: C.faint, textDecoration: negotiated !== undefined ? 'line-through' : undefined }}>
               {formatTetri(asTetri(v.price))}
             </span>
@@ -614,15 +650,22 @@ function WinePricesSection({ companyId, vintages, prices, setPrices, locale }: {
             )}
           </div>
         )
+                })}
+              </div>
+            )}
+          </div>
+        )
       })}
     </div>
   )
 }
 
 // ── Edit slide-over panel ──────────────────────────────────────────────────
-function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages }: {
+function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, personCodesOn, zones, vintages, wineOn }: {
   zones: ZoneLite[]
   vintages: VintageLite[]
+  /** The tenant's wine module is on — a booking company then has wine terms too (T-22). */
+  wineOn: boolean
   company: Company
   onClose: () => void
   onSaved: (updated: Partial<Company>) => void
@@ -776,12 +819,18 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
 
           <div className="h-px" style={{ backgroundColor: C.border }} />
 
-          {/* Wine discount — only relevant when isWineOrderCompany */}
-          {isWineOrder && (
+          {/* Wine terms (% off + agreed prices) — for a wine-order company, and since T-22 also for a booking company when the
+              wine module is on: the same terms price the wine added to its bookings ("wine for the table", Plan D-5 / D-18). */}
+          {(isWineOrder || (isBooking && wineOn)) && (
             <>
               <div className="flex flex-col gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.wineDiscount')}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: C.faint }}>{at('companies.editPanel.wineDiscount')}</p>
+                  {/* The same "how the % and agreed prices work together" note as on Wine prices below — so nobody has to remember it. */}
+                  <HelpHint text={at('companies.winePrices.hint')} />
+                </div>
                 <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.wineDiscountHint')}</p>
+                {isBooking && <p className="text-xs" style={{ color: C.muted }}>{at('companies.editPanel.tableWineHint')}</p>}
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -795,10 +844,12 @@ function EditPanel({ company, onClose, onSaved, locale, paymentModuleOn, roles, 
                   />
                   <span className="text-sm font-medium" style={{ color: C.muted }}>{at('companies.editPanel.percentOffAllWines')}</span>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
-                  <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
-                </label>
+                {isWineOrder && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={isExporter} onChange={e => setIsExporter(e.target.checked)} className="rounded" />
+                    <span className="text-sm" style={{ color: C.text }}>{at('companies.exporter.label')}</span>
+                  </label>
+                )}
               </div>
               <div className="h-px" style={{ backgroundColor: C.border }} />
               <WinePricesSection companyId={company.id} vintages={vintages} prices={winePrices} setPrices={setWinePrices} locale={locale} />
@@ -1252,6 +1303,7 @@ export default function CompaniesClient({ zones = [], vintages = [], companies: 
           paymentModuleOn={paymentModuleOn}
           zones={zones}
           vintages={vintages}
+          wineOn={wineOrdersOn}
         />
       )}
 
