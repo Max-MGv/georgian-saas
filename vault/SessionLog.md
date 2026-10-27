@@ -8,6 +8,13 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-27 (late night, last) — What's new: each change card folded to its title — ON PRODUCTION (master `243d176`)
+
+- Max: "adding collapsing to each card (just like in super admin) is a simple change, implement and push to staging and master, green light on both". `ChangeCard` got a `collapsible` prop (clients' page only; the Super Admin editor is unchanged); cards start folded, the newest release is still the only one open. tsc + eslint clean; checked on a throwaway page (deleted): folded at start, click opens body / steps / link, click folds again. Staging `58c870f` READY → master merge `243d176`, READY (the upload step was slow this time, ~6 min total vs ~2 min — probably related to the Vercel Functions Storage overage, not confirmed). Backups `…200117_prod_…`.
+- **Release notes for T-151, T-301 (both halves), wine re-pricing and the ticket-copy cancellation were never written** — nobody drafted them (my omission, Rule 12.4 says every entry gets screenshots, drafted with the release). Max asked "why can't I see them?" Answer given; drafting needs Max's go (production board write).
+
+---
+
 ## 2026-10-27 (late night) — production → staging ticket copy CANCELLED (Max: "we tried it and I don't like it … if I want prod tickets I will go to prod")
 
 - **Dev database (done, with Max's explicit instruction):** all 34 P-tickets removed (T#201–T#309: the 24 real client reports P-1…P-24 plus 10 `ZZ Tickets E2E` / TEST copies) with their 34 copied BugReports and 17 screenshot files in `ticket-attachments`. Nothing else linked to them. The `production-forward` token is **revoked** (not deleted). Backups first: explicit `2026-10-27_182250_dev_before-removing-p-tickets` (verified: every checksum + row count OK, 79 storage files) plus the hook's. Script: `saas/scripts/_qa/_remove_p_tickets.ts` (dry run by default; `--write`). It first failed on a Supabase client WebSocket error before deleting anything, then used the Storage REST API. The production board is untouched — the real reports live there.
