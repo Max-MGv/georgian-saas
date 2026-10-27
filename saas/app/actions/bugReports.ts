@@ -20,7 +20,8 @@ import { requireAdmin } from '@/lib/requireAdmin'
 import { sendTenantEmail } from '@/lib/emails/sendEmail'
 import type { BugReportStatus } from '@prisma/client'
 import { checkWriteRateLimit } from '@/lib/writeRateLimit'
-import { createTicket } from '@/lib/ticketService'
+import { revalidatePath } from 'next/cache'
+import { TicketError, createTicket, withdrawReport } from '@/lib/ticketService'
 import {
   ALLOWED_IMAGE_TYPES, deriveTitle, sanitizeBreadcrumbs, environmentFromHost, escapeHtml, safeHttpUrl,
   sniffImageType, ticketRef,
@@ -286,6 +287,24 @@ export type MyBugReportListItem = {
 }
 
 const MY_REPORTS_COMMENT_PREVIEW_LENGTH = 160
+
+/** "Close this report" on My Reports (T-301). The user id comes from the session, never from the client. */
+export async function resolveMyBugReport(reportId: string): Promise<{ ok: true } | { error: string }> {
+  await requireAdmin()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+  if (typeof reportId !== 'string' || !CUID_LIKE.test(reportId)) return { error: 'Report not found.' }
+  try {
+    await withdrawReport(reportId, user.id)
+  } catch (e) {
+    if (e instanceof TicketError) return { error: e.message }
+    console.error('[resolveMyBugReport]', e)
+    return { error: 'Something went wrong - please try again.' }
+  }
+  revalidatePath('/admin/my-reports')
+  return { ok: true }
+}
 
 export async function getMyBugReports(): Promise<MyBugReportListItem[]> {
   // requireAdmin() confirms this is a logged-in admin for the current

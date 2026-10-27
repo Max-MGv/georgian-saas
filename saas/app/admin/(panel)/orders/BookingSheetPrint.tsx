@@ -1,5 +1,7 @@
+import { Fragment } from 'react'
 import { adminT } from '@/lib/adminT'
 import { countryName } from '@/lib/countries'
+import { BOOKING_SHEET_COLUMNS, type BookingSheetColumnKey } from '@/lib/bookingSheetColumns'
 
 type Order = {
   id: string
@@ -32,7 +34,7 @@ type Order = {
   contacts: { roleKey: string; name: string; phone: string | null }[]
 }
 
-type Props = { orders: Order[]; displayName?: string; locale?: string }
+type Props = { orders: Order[]; displayName?: string; locale?: string; /** Columns left off the sheet (T-151); empty = print all. */ hiddenColumns?: readonly string[] }
 
 function formatDate(d: Date) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -46,7 +48,7 @@ function Cell({ children, bold = false }: { children: React.ReactNode; bold?: bo
   )
 }
 
-export default function BookingSheetPrint({ orders, displayName = 'Your Winery', locale = 'en' }: Props) {
+export default function BookingSheetPrint({ orders, displayName = 'Your Winery', locale = 'en', hiddenColumns = [] }: Props) {
   const at = (key: string) => adminT(locale, key)
   const sorted = [...orders].sort((a, b) => {
     const d = new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -57,26 +59,32 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
     ? `${formatDate(sorted[0].date)} – ${formatDate(sorted[sorted.length - 1].date)}`
     : '—'
 
-  const headers = [
-    at('orders.col.date'),
-    at('orders.sheet.tastingGuests'),
-    at('orders.sheet.lunchOnlyGuests'),
-    at('orders.sheet.lunchGuests'),
-    at('orders.sheet.extraGuests'),
-    at('orders.sheet.kitchenTotal'),
-    at('orders.sheet.hotDishVeg'),
-    at('orders.sheet.hotDishMeat'),
-    at('orders.sheet.foodNotes'),
-    at('orders.sheet.addOns'),
-    at('orders.sheet.tableWine'),
-    at('orders.sheet.notes'),
-    at('orders.col.company'),
-    at('orders.sheet.nationality'),
-    at('orders.sheet.contactName'),
-    at('orders.sheet.contactPhone'),
-    at('orders.sheet.guideName'),
-    at('orders.sheet.guidePhone'),
-  ]
+  // The date/time column is always printed; the rest follow the winery's choice (T-151, lib/bookingSheetColumns.ts).
+  const shown = BOOKING_SHEET_COLUMNS.filter(c => !hiddenColumns.includes(c.key))
+  const headers = [at('orders.col.date'), ...shown.map(c => at(c.label))]
+
+  const cellFor = (o: Order, key: BookingSheetColumnKey): React.ReactNode => {
+    const guide = o.contacts.find(c => c.roleKey === 'guide')
+    switch (key) {
+      case 'tasting': return <Cell bold>{o.tastingGuestCount > 0 ? o.tastingGuestCount : '—'}</Cell>
+      case 'lunchOnly': return <Cell bold>{o.lunchOnlyGuestCount > 0 ? o.lunchOnlyGuestCount : '—'}</Cell>
+      case 'tastingLunch': return <Cell bold>{o.lunchGuestCount > 0 ? o.lunchGuestCount : '—'}</Cell>
+      case 'free': return <Cell bold>{o.freeGuestCount > 0 ? o.freeGuestCount : '—'}</Cell>
+      case 'kitchenTotal': return <Cell bold>{o.guestCount}</Cell>
+      case 'hotDishVeg': return <Cell>{o.hotDishVegetable}</Cell>
+      case 'hotDishMeat': return <Cell>{o.hotDishMeat}</Cell>
+      case 'foodNotes': return <Cell>{o.foodNotes}</Cell>
+      case 'addOns': return <Cell>{o.masterclassLines && o.masterclassLines.length > 0 ? o.masterclassLines.map(l => `${locale === 'ka' && l.nameKa ? l.nameKa : l.name} × ${l.quantity}`).join(', ') : null}</Cell>
+      case 'tableWine': return <Cell>{o.wineLines && o.wineLines.length > 0 ? o.wineLines.map(l => `${l.name} ${l.year} × ${l.quantity}`).join(', ') : null}</Cell>
+      case 'notes': return <Cell>{o.notes}</Cell>
+      case 'company': return <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
+      case 'nationality': return <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
+      case 'contactName': return <Cell>{o.name} {o.surname}</Cell>
+      case 'contactPhone': return <Cell>{o.phone}</Cell>
+      case 'guideName': return <Cell>{guide?.name}</Cell>
+      case 'guidePhone': return <Cell>{guide?.phone}</Cell>
+    }
+  }
 
   return (
     <div className="booking-sheet-print" style={{ fontFamily: 'Georgia, serif', color: '#1c1008', backgroundColor: '#fff', padding: 24 }}>
@@ -105,31 +113,12 @@ export default function BookingSheetPrint({ orders, displayName = 'Your Winery',
             </tr>
           </thead>
           <tbody>
-            {sorted.map((o, i) => {
-              const guide = o.contacts.find(c => c.roleKey === 'guide')
-              return (
-                <tr key={o.id} style={{ backgroundColor: i % 2 === 1 ? '#fbf6ec' : '#fff' }}>
-                  <Cell bold>{formatDate(o.date)} · {o.timeSlot}</Cell>
-                  <Cell bold>{o.tastingGuestCount > 0 ? o.tastingGuestCount : '—'}</Cell>
-                  <Cell bold>{o.lunchOnlyGuestCount > 0 ? o.lunchOnlyGuestCount : '—'}</Cell>
-                  <Cell bold>{o.lunchGuestCount > 0 ? o.lunchGuestCount : '—'}</Cell>
-                  <Cell bold>{o.freeGuestCount > 0 ? o.freeGuestCount : '—'}</Cell>
-                  <Cell bold>{o.guestCount}</Cell>
-                  <Cell>{o.hotDishVegetable}</Cell>
-                  <Cell>{o.hotDishMeat}</Cell>
-                  <Cell>{o.foodNotes}</Cell>
-                  <Cell>{o.masterclassLines && o.masterclassLines.length > 0 ? o.masterclassLines.map(l => `${locale === 'ka' && l.nameKa ? l.nameKa : l.name} × ${l.quantity}`).join(', ') : null}</Cell>
-                  <Cell>{o.wineLines && o.wineLines.length > 0 ? o.wineLines.map(l => `${l.name} ${l.year} × ${l.quantity}`).join(', ') : null}</Cell>
-                  <Cell>{o.notes}</Cell>
-                  <Cell>{o.company?.name ?? at('orders.sheet.individual')}</Cell>
-                  <Cell>{o.nationalities.length > 0 ? o.nationalities.map(countryName).join(', ') : null}</Cell>
-                  <Cell>{o.name} {o.surname}</Cell>
-                  <Cell>{o.phone}</Cell>
-                  <Cell>{guide?.name}</Cell>
-                  <Cell>{guide?.phone}</Cell>
-                </tr>
-              )
-            })}
+            {sorted.map((o, i) => (
+              <tr key={o.id} style={{ backgroundColor: i % 2 === 1 ? '#fbf6ec' : '#fff' }}>
+                <Cell bold>{formatDate(o.date)} · {o.timeSlot}</Cell>
+                {shown.map(c => <Fragment key={c.key}>{cellFor(o, c.key)}</Fragment>)}
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

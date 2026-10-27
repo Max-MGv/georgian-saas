@@ -69,6 +69,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   //      so colleagues never see each other's details. A company code still resolves the
   //      company, but then the guest types their own details as they did before pickers.
   person_codes_enabled: 'false',
+  // Booking sheet (T-151) — comma-separated keys of the printed columns this winery left off; see lib/bookingSheetColumns.ts.
+  booking_sheet_hidden_columns: '',
 }
 
 /** A tenant's settings as `key → value`, straight from the DB (no defaults applied). */

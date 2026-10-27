@@ -12,7 +12,7 @@
 // Server-only: takes the caller's transaction.
 
 import type { TxClient } from '@/lib/db'
-import { priceWineOrder, type PricedLine } from '@/lib/winePricing'
+import { priceWineOrder, wineLineAmount, type PricedLine } from '@/lib/winePricing'
 import { wineDisplayName } from '@/lib/wineName'
 
 /** Whole bottles per line, 1…999 (the forms stop at far less; this is the crafted-request bound). */
@@ -94,4 +94,66 @@ export async function priceTableWine(
     }
   })
   return { ok: true, rows, total: pricing.total }
+}
+
+/** What re-pricing needs of a stored wine line. */
+export type StoredWineLine = { id: string; wineVintageId: string | null; quantity: number; priceSnapshot: number; lineTotal: number | null }
+
+export type WineReprice = {
+  updates: { id: string; priceSnapshot: number; negotiated: boolean; discountPercent: number | null; lineTotal: number }[]
+  /** The booking's wine total after re-pricing, tetri. */
+  total: number
+}
+
+/**
+ * Re-price the wine already on a booking for ITS COMPANY AS IT NOW IS (Max, 2026-10-27: before payment, a change an admin makes
+ * must flow through everything it affects). Used when an admin changes a booking's company, or links a company to one that had
+ * none — the same moments the visit itself is re-priced. The terms are what a bottle added today would get: the vintage's price
+ * today, the company's agreed price for it (no % on top) or else the company's % — an individual (null) pays the website price.
+ * Admin screens are trusted to name the company (the access-code proof is for the public form); the rules and the per-line
+ * rounding are `priceWineOrder`'s, so this can never price differently from adding the same bottle.
+ *
+ * A line whose wine no longer exists (the vintage was deleted) cannot be re-priced and keeps what it was sold at.
+ * Pure read here: the caller decides when to write (`writeRepricedWine`), after everything else has been accepted.
+ */
+export async function repriceTableWine(
+  tx: TxClient,
+  tenantId: string,
+  lines: StoredWineLine[],
+  termsCompanyId: string | null,
+): Promise<WineReprice> {
+  const ids = [...new Set(lines.map(l => l.wineVintageId).filter((id): id is string => !!id))]
+  if (ids.length === 0) return { updates: [], total: lines.reduce((s, l) => s + wineLineAmount(l), 0) }
+  const [vintages, company] = await Promise.all([
+    tx.wineVintage.findMany({ where: { id: { in: ids }, tenantId }, select: { id: true, price: true } }),
+    termsCompanyId
+      ? tx.company.findFirst({
+          where: { id: termsCompanyId, tenantId },
+          select: { wineDiscountPercent: true, winePrices: { where: { wineVintageId: { in: ids } }, select: { wineVintageId: true, price: true } } },
+        })
+      : Promise.resolve(null),
+  ])
+  const priceOf = new Map(vintages.map(v => [v.id, v.price]))
+  const known = lines.filter(l => l.wineVintageId && priceOf.has(l.wineVintageId))
+  const kept = lines.filter(l => !known.includes(l))
+  const pricing = priceWineOrder(
+    known.map(l => ({ vintageId: l.wineVintageId!, quantity: l.quantity, standardPrice: priceOf.get(l.wineVintageId!)! })),
+    Object.fromEntries((company?.winePrices ?? []).map(p => [p.wineVintageId, p.price])),
+    company?.wineDiscountPercent ?? null,
+  )
+  return {
+    // priceWineOrder returns its lines in the order it was given them.
+    updates: pricing.lines.map((p, i) => ({ id: known[i].id, priceSnapshot: p.unitPrice, negotiated: p.negotiated, discountPercent: p.discountPercent, lineTotal: p.lineTotal })),
+    total: pricing.total + kept.reduce((s, l) => s + wineLineAmount(l), 0),
+  }
+}
+
+/** Store what `repriceTableWine` worked out (in the caller's transaction, so it commits or fails with the booking's own change). */
+export async function writeRepricedWine(tx: TxClient, updates: WineReprice['updates']): Promise<void> {
+  for (const u of updates) {
+    await tx.wineOrderItem.update({
+      where: { id: u.id },
+      data: { priceSnapshot: u.priceSnapshot, negotiated: u.negotiated, discountPercent: u.discountPercent, lineTotal: u.lineTotal },
+    })
+  }
 }

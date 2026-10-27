@@ -109,6 +109,7 @@ C-1…C-5 and Q-A are **decided as recommended** below (they are now decisions D
 | D-20 = C-4 | Phone optional on guest-purchase pickup orders. |
 | D-21 = C-5 | Print booking sheet lists add-ons + table wine. |
 | D-22 = Q-A | Visit-type choices per group: Tasting · Tasting + Lunch · Lunch (own tick box, default ticked wherever Tasting + Lunch is). |
+| D-23 (2026-10-27) | **Before payment, an admin's change flows through everything it affects.** Changing / linking a booking's company re-prices its wine with the new company's terms (website price for an individual); guest / visit edits do not touch wine; later catalogue price changes never rewrite existing bookings (the guest was quoted). No history event (would need an enum migration). |
 
 Original wording:
 
@@ -424,7 +425,7 @@ Strictly sequential. Every chunk: dev DB + localhost, verified (specs + screensh
   MaintenanceNotes §38, RLS-Architecture, FeatureLog, Feature note, SessionLog; Max tests on
   staging with a test checklist on T-7/T-22.
 
-**Chunk 12 — Production** — Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
+**Chunk 12 — Production — ✅ DONE 2026-10-27 (master `db1df4a`, deployment READY, 0 runtime errors; see SessionLog) — ** Max 2026-10-27: *"start the process, you have green light on all counts… if integration tests error, finish the other stuff and we review those cases together."*
 
 **Pre-flight + rehearsal — ✅ DONE 2026-10-27 (read-only on production; nothing written there)**
 - Backup `2026-10-27_101815_prod_t7-t22-preflight` (1,413 rows, 36 tables, `backup-verify` OK). Prod = master `dd90e93`; exactly the 5 T-7/T-22 migrations pending (prod has 39 applied, repo 44, nothing prod-only).
@@ -439,7 +440,7 @@ Strictly sequential. Every chunk: dev DB + localhost, verified (specs + screensh
 |---|---|---|
 | 1 | Order page keeps `lines` / `wineLines` / `extras` in `useState` and never re-syncs them from props after `router.refresh()` — after a guest-count save the server rewrites per-person quantities but the page total / balance / printed invoice use the stale line amounts until reload (`OrderDetail.tsx` ~895; my spec only asserted the DB) | **REAL, fix before production** (re-sync from props when no card is being edited; add a screen-level assertion) |
 | 2 | Per-person lines are forced to the paying guests on any re-price; legacy lines with a typed quantity get re-quantified | Prod impact **none**: Nikalas 0 mismatches; 4 demo lines (guestCount incl. free) are regenerated nightly. Semantics = D-19 (per person = paying guests; a partial group = per piece). Documented. |
-| 3 | Changing / assigning a booking's company does not re-price its wine lines (they keep the terms they were sold with) | **Decision for Max** (re-price vs frozen); prod impact none today (no table wine exists on prod until an admin switches a wine on) |
+| 3 | Changing / assigning a booking's company does not re-price its wine lines (they keep the terms they were sold with) | **DECIDED 2026-10-27 (D-23): re-price on admin-driven change** — built, `af7f4ca`, not pushed yet. See the D-23 row below. |
 | 4 | Individual booking with no Individuals price table now gets total = add-ons + wine (was 0) → online payment could charge only those | Cannot occur on prod (both tenants have an Individuals table, every booking company has prices). Earlier decision E1; note for future wineries. |
 | 5 | `wine_on_bookings` backfill treats every line of a discounted order as a standard line (cannot know a line was negotiated) | Moot on prod: **0 `CompanyWinePrice` rows**, so no negotiated line exists; the per-order sum check passes (rehearsal). |
 | 6 | Add-ons now show on every company form (migration group visible to companies, no layout gate) | No change on prod: `enable_enhanced_company_booking` is true for both tenants. |

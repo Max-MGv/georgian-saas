@@ -1446,6 +1446,12 @@ Plan: [[Plan-AddOnsAndWine]]. **Not on staging or production yet** — built on 
     `lib/tableWine.ts` (`priceTableWine`) is the one validator/pricer for every booking write path (public `createBooking`, admin
     `createOrderAdmin`, order page `orderWine.ts`, and the re-pricing paths `updateOrderEnhanced` / `assignOrderCompany` / `updateOrderBooking`
     — all of which must keep `wineLines` in the total; a destructuring that drops it silently prices a booking without its wine).
+    **Company change re-prices the wine (Max, 2026-10-27: before payment, a change flows through everything it affects):** `updateOrderBooking`
+    (company changed) and `assignOrderCompany` (company linked) call `repriceTableWine()` / `writeRepricedWine()` (`lib/tableWine.ts`) — the new
+    company's % / agreed prices, or the website price for an individual, at the vintage's price today, per-line rounding — in the same
+    transaction and total as the visit. Guest-count / visit-type edits do NOT touch wine (it does not depend on guests); catalogue price changes
+    never rewrite existing bookings. A line whose vintage was deleted keeps what it was sold at. Paid bookings refuse a company change.
+    The Booking Info card says so before Save (the live preview shows the visit only).
 12. **Company wine terms reach a booking only after the code is proven** (§35). The public form gets them via the code-gated resolver
     (`ProvenCompany.wineDiscountPercent / winePrices`); `priceTableWine` takes `termsCompanyId` only from a server-proven company.
     A guest purchase never has a company: INDIVIDUAL pickup at website prices (D-20, phone optional).

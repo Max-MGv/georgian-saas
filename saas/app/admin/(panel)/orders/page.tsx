@@ -7,6 +7,7 @@ import { BOOKING_STAGES } from '@/lib/statusFlow'
 import { bookingWine, BOOKING_WINE_SELECT } from '@/lib/wineSales'
 import { REVENUE_LEVELS, DEFAULT_REVENUE_LEVEL, parseRevenueLevel, revenueAt, type RevenueLevel } from '@/lib/revenueLevel'
 import { getSetting } from '@/app/actions/settings'
+import { BOOKING_SHEET_HIDDEN_SETTING } from '@/lib/bookingSheetColumns'
 import { getContent } from '@/app/actions/siteContent'
 import { getDistinctOrderNationalities } from '@/app/actions/orders'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
@@ -43,7 +44,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const params = await searchParams
   const [tenantId, h] = await Promise.all([getTenantId(), headers()])
   const displayName = h.get('x-tenant-name') ?? 'Your Winery'
-  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessageKa, invoiceEmailMessageEn, adminLanguage, nationalityOptions] = await Promise.all([
+  const [companies, recipientName, personalNumber, bankName, bankCode, iban, invoiceDetailed, invoiceEmailMessageKa, invoiceEmailMessageEn, adminLanguage, nationalityOptions, sheetHiddenColumns] = await Promise.all([
     withTenantDb(tenantId, tx => tx.company.findMany({ where: { tenantId }, orderBy: { name: 'asc' } })),
     getSetting('payment_recipient_name'),
     getSetting('payment_personal_number'),
@@ -57,6 +58,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     // Plan-CompanyNationality Chunk 8 — distinct nationalities actually on this tenant's orders,
     // not the full ~195-country list, same "only show what's in use" pattern as the company filter.
     getDistinctOrderNationalities(tenantId),
+    getSetting(BOOKING_SHEET_HIDDEN_SETTING),
   ])
   const locale = adminLanguage || 'en'
   const at = (key: string) => adminT(locale, key)
@@ -305,7 +307,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       ) : (
         <div data-tour="orders-table">
-          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.payment}-${params.nationality}`} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} orders={orders.map(o => ({
+          <OrdersTable key={`${params.dateFrom}-${params.dateTo}-${params.companyId}-${params.status}-${params.payment}-${params.nationality}`} view={view === 'list' ? 'list' : view === 'board' ? 'board' : 'table'} tenantId={tenantId} detailed={detailed} defaultEmailMessageKa={invoiceEmailMessageKa} defaultEmailMessageEn={invoiceEmailMessageEn} displayName={displayName} locale={locale} sheetHiddenColumns={sheetHiddenColumns} orders={orders.map(o => ({
             id: o.id,
             stage: o.stage,
             createdAt: o.createdAt,

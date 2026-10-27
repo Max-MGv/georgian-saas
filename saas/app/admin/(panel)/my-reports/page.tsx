@@ -4,6 +4,7 @@ import { adminT } from '@/lib/adminT'
 import { formatIsoDay } from '@/lib/wineOrderDate'
 import { tbilisiDateIso } from '@/lib/tbilisiTime'
 import ReportScreenshot from '@/components/ReportScreenshot'
+import CloseReportButton from './CloseReportButton'
 
 // Phase 6 of Plan-BugReportWidget.md — a read-only status view of the
 // reports THIS logged-in admin personally submitted (never other admins',
@@ -45,6 +46,10 @@ export default async function MyReportsPage() {
   ])
   const locale = adminLanguage || 'en'
   const at = (key: string) => adminT(locale, key)
+  const closeLabels = {
+    close: at('myReports.close'), confirm: at('myReports.closeConfirm'), yes: at('myReports.closeYes'),
+    cancel: at('myReports.closeCancel'), error: at('myReports.closeError'),
+  }
 
   return (
     <div className="max-w-2xl">
@@ -93,6 +98,11 @@ export default async function MyReportsPage() {
                   {r.comment}
                 </p>
                 {r.screenshotSignedUrl && <ReportScreenshot src={r.screenshotSignedUrl} label={at('myReports.screenshot')} />}
+                {(r.status === 'NEW' || r.status === 'IN_PROGRESS') && (
+                  <div className="mt-3">
+                    <CloseReportButton reportId={r.id} labels={closeLabels} />
+                  </div>
+                )}
                 {r.reply && (
                   <div className="mt-3 rounded-lg p-3 text-sm" style={{ backgroundColor: 'var(--site-bg)', border: '1px solid var(--site-border)' }}>
                     <div className="text-xs font-semibold mb-1" style={{ color: 'var(--site-muted)' }}>
