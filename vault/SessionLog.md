@@ -21,6 +21,18 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-28 — T-302 wine photo picker built and pushed to STAGING (`c26283b`); NOT on production
+
+- Max asked "offer solutions" (T-302 from the public widget). I read the old picker (every wine and every vintage repeated the whole library as 52 px thumbnails; unnamed `timestamp-random.webp` files; deleting a photo left dead links on other wines; list capped at 200; six Nikalas demo bottles shown to every winery), offered options A/B/C and published a clickable **mockup artifact** (Today vs Proposed, Product vs Vintage level). Max: "I like how you implemented it" → built option A on localhost, tested in the browser pane, then Max asked for default bottles ("simple wine bottle mockups by color") → 5 SVGs, and "ship it to staging".
+- Details, files and decisions: [[Feature 246 - Wine photo picker (T-302)]]; coupling rules MaintenanceNotes §42; FeatureLog #246. Ticket T-302 → "Ready to test" with Max's checklist; commit linked. No migration, no env change.
+- **Max's decisions:** the six `/images/products/*.png` are Nikalas's test photos and must NOT be a default for every winery (they stay listed only while a wine uses one); defaults are generic coloured bottles.
+- **Tested (dev DB, Staging Winery):** set / clear product and vintage photo, shared-photo delete (warning names both, DB confirmed both cleared + file gone), upload inside the popup, search, tabs, empty state, phone width (no sideways scroll). Test photos removed, Rkatsiteli photos restored, dev backup taken first. Scripts in `saas/scripts/_qa/` (`_t302_*`, `_check_winephotos`, `_check_t302_*`; untracked).
+- **Not done:** Playwright spec; Nikalas's production data not looked at (read-only check offered, waiting for Max's go); release note for clients not drafted (draft it with the production merge: before/after shots, show Wines → Change photo); Georgian wording is Claude's.
+- **Open for Max:** test on staging (checklist on T-302 "Waiting for me"); then say go for production (code-only merge, staging → master).
+- Lesson: local dev served stale code twice after edits (first Turbopack disk cache, then a missed file watch) — see the gotcha line in the feature note.
+
+---
+
 ## 2026-10-27 (late night, final) — release-note DRAFT for today's features is on the production board (hidden)
 
 - Max: "yeah draft the release notes for that" (after asking why T-151 / T-301 / wine re-pricing had no notes). **Production board → Releases, hidden DRAFT dated 2026-10-27, id `cmvqwui2t0000lc07i88w0k11`** — separate from the published 27 Oct release so nothing reached clients. Four entries, EN + KA (Georgian is Claude's wording): (1) column picker + "Kitchen total" → "Total guests" (T-151) — before/after; (2) What's new folded by date and by card (T-301) — before/after; (3) Close your own reports (T-301) — before/after + the confirm step; (4) wine follows the company — before/after (the new note on Booking Info). Max publishes / shows to clients; he may want to change the date or fold it into the 27 Oct release.
