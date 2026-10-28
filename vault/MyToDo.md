@@ -12,6 +12,17 @@ Things Max needs to do manually that are **not tickets**. Claude updates this af
 
 ---
 
+## 🆕 2026-10-27/28 — everything is on production (master `243d176`). Your open chores
+
+1. **Publish the release-note draft** — https://nikalasmarani.vineworks.ge/super-admin/releases → the hidden 27 Oct draft (4 changes, 9 images): switch **Published**, then **Shown to clients**. Read the Georgian first (Claude's wording). It has the same date as the already-published 27 Oct release — keep both, merge them, or change the date.
+2. **Add the Wines screenshot to the published 27 Oct "Wine for the table" entry** (unpublish that release → add the image in the editor → republish; the API can't edit published releases). It shows Wines → "On bookings" so clients know where to enable wines. Suggested caption: "In Wines, switch On bookings on for each wine you want guests and your team to be able to add to a booking."
+3. **Vercel Functions Storage is over the Hobby limit (12.46 / 10 GB)** — pick: skip builds for vault-only pushes, delete older preview deployments, shrink the server functions, or upgrade to Pro. Details in SessionLog "START HERE". The site works meanwhile.
+4. **Tickets "Waiting for me":** T-151 and T-301 have test steps on their cards; only you mark them Done. (The wine re-pricing has no ticket — test it on a real company change: Order → Booking Info → Edit → change the company → note appears → Save → wine lines + total re-priced.)
+5. Still open from before: **T-311** (tier 5 Flitt card tests), check the **demo after the 03:00 reseed**.
+6. Optional: if you want wine / food choices on invoices or want Nikalas's invoice layout checked, say so (SessionLog "Invoice facts").
+
+---
+
 ## 🚀 2026-10-16 — EVERYTHING IS LIVE. Your few chores.
 
 All of staging went to production today (tickets, wine order features, release notes, QA fixes). Safety-checked: no
