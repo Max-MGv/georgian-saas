@@ -322,7 +322,13 @@ function ForkIcon() {
   )
 }
 
-function MobileOrderCard({ order, locale, onOpen }: { order: Order; locale: string; onOpen: () => void }) {
+function MobileOrderCard({ order, locale, onOpen, onStatusMenu }: {
+  order: Order
+  locale: string
+  onOpen: () => void
+  /** T-319 — the status pill opens the same dropdown the desktop rows use, without opening the booking. */
+  onStatusMenu: (e: React.MouseEvent<HTMLElement>) => void
+}) {
   const at = (key: string) => adminT(locale, key)
   const cfg = styleFor(order.stage)
   const isCompany = order.bookingType === 'COMPANY'
@@ -352,12 +358,16 @@ function MobileOrderCard({ order, locale, onOpen }: { order: Order; locale: stri
           <p className="font-semibold truncate" style={{ color: C.text, fontSize: '1rem' }}>{title}</p>
           <p className="text-sm truncate" style={{ color: C.faint }}>{sub}</p>
         </div>
-        <span
-          className="text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0"
+        {/* The ::before widens the tap area to 40px+ without making the pill itself bigger. */}
+        <button
+          type="button"
+          aria-haspopup="menu"
+          onClick={e => { e.stopPropagation(); onStatusMenu(e) }}
+          className="relative text-xs px-2.5 py-1 rounded-full font-semibold whitespace-nowrap flex-shrink-0 before:content-[''] before:absolute before:-inset-x-2 before:-inset-y-2"
           style={{ backgroundColor: cfg.bg, color: cfg.color }}
         >
-          {labelFor(locale, order.stage)}
-        </span>
+          {labelFor(locale, order.stage)} ▾
+        </button>
       </div>
 
       {/* When + type */}
@@ -1019,7 +1029,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <p className="text-center py-12 text-sm" style={{ color: C.faint }}>{at('orders.noOrders')}</p>
         )}
         {orders.map(order => (
-          <MobileOrderCard key={order.id} order={order} locale={locale} onOpen={() => router.push(`/admin/orders/${order.id}`)} />
+          <MobileOrderCard key={order.id} order={order} locale={locale}
+            onOpen={() => router.push(`/admin/orders/${order.id}`)}
+            onStatusMenu={e => toggleStatusMenu(order.id, e)} />
         ))}
       </div>
 
@@ -1338,12 +1350,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       {statusMenuId && statusMenuRect && typeof document !== 'undefined' && (() => {
         const order = orders.find(o => o.id === statusMenuId)
         if (!order) return null
-        const menuW = 140
-        const steps = menuSteps(order)
-        const choosingPayment = payingOrderId === order.id
-        const menuH = choosingPayment ? 110 : steps.length * 33 + 8
         const vw = window.innerWidth
         const vh = window.innerHeight
+        // Phone (T-319): finger-sized rows (44px) and a wider menu; desktop keeps its compact 33px rows.
+        const phone = vw < 768
+        const menuW = phone ? 180 : 140
+        const rowH = phone ? 44 : 33
+        const steps = menuSteps(order)
+        const choosingPayment = payingOrderId === order.id
+        const menuH = choosingPayment ? (phone ? 170 : 110) : steps.length * rowH + 8
         const left = Math.min(statusMenuRect.left, vw - menuW - 8)
         const top = statusMenuRect.bottom + 4 + menuH > vh
           ? Math.max(statusMenuRect.top - menuH - 4, 8)
@@ -1360,15 +1375,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
                 <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
                 <div className="flex flex-col gap-1">
                   <button onClick={() => handlePaymentMethodChosen(order.id, 'BANK_TRANSFER')}
-                    className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
                     {at('paymentMethod.bankTransfer')}
                   </button>
                   <button onClick={() => handlePaymentMethodChosen(order.id, 'CASH')}
-                    className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
+                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
                     {at('paymentMethod.cash')}
                   </button>
                   <button onClick={() => setPayingOrderId(null)}
-                    className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
+                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-0.5" style={{ color: C.muted }}>
                     {at('paymentMethod.cancel')}
                   </button>
                 </div>
@@ -1377,7 +1392,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
               <button
                 key={step.code}
                 onClick={() => handleStepClick(order.id, step)}
-                className="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
+                className="w-full text-left px-3 min-h-[44px] md:min-h-0 py-1.5 text-sm md:text-xs flex items-center gap-2 transition-colors hover:bg-amber-100"
                 style={{ color: C.text }}
               >
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: styleFor(step.code).color }} />
