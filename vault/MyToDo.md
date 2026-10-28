@@ -12,6 +12,15 @@ Things Max needs to do manually that are **not tickets**. Claude updates this af
 
 ---
 
+## 🆕 2026-10-28 — T-302 wine photo picker is ON PRODUCTION (master `7d462e7`). Your chores
+
+- [ ] **Publish the release note draft** — production board → Super Admin → Releases → the hidden draft dated 2026-10-28 (id `cmvs1i3r60000l6082r32fv2e`, "Wine photos are easier to manage"): read it in English and Georgian (Georgian is Claude's wording), then **Published**, then **Shown to clients**. It has 3 entries and 17 pictures.
+- [ ] Try the new photo window on production, on a phone: Wines → open a wine → Wine Details → Change photo (and the small photo on a vintage row). Then mark **T-302 Done** on the board when happy.
+- [ ] Still open from before: publish the hidden 27 Oct draft `cmvqwui2t0000lc07i88w0k11`; the Vercel Functions Storage over-limit decision; T-311.
+- Not checked: how Nikalas's own production wines use photos (the read-only check was skipped on purpose).
+
+---
+
 ## 🆕 2026-10-27/28 — everything is on production (master `243d176`). Your open chores
 
 1. **Publish the release-note draft** — https://nikalasmarani.vineworks.ge/super-admin/releases → the hidden 27 Oct draft (4 changes, 9 images): switch **Published**, then **Shown to clients**. Read the Georgian first (Claude's wording). It has the same date as the already-published 27 Oct release — keep both, merge them, or change the date.

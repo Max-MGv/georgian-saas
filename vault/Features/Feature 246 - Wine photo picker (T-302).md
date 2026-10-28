@@ -4,7 +4,7 @@ tags: [feature]
 
 # Feature 246 — Wine photo picker: one shared photo window (T-302)
 
-Built 2026-10-28 on Max's go (client report from the public widget, "it will get overloaded … unclear what photos are what wine"). Code-only, **no migration**. FeatureLog row #246. **On staging (`c26283b`), NOT on production.** Ticket T-302 is "Ready to test" on the staging board.
+Built 2026-10-28 on Max's go (client report from the public widget, "it will get overloaded … unclear what photos are what wine"). Code-only, **no migration**. FeatureLog row #246. **ON PRODUCTION since 2026-10-28 (master `7d462e7`).** Ticket T-302 is "Ready to test" on the staging board.
 
 ## What it does
 
@@ -47,7 +47,7 @@ Upload 2–3 photos; set a product photo and a vintage photo; "Use product photo
 
 - Not run against Nikalas's production data (does he use only the six old photos or also uploads?).
 - No Playwright spec for the picker (none existed for the old one either).
-- Release note for clients not drafted yet — draft it with the production merge, with before/after shots and where it is (Wines → Change photo) (Rule 12.4).
+- Release note: hidden DRAFT on the production board (`cmvs1i3r60000l6082r32fv2e`, 3 entries, 17 pictures) — Max publishes it.
 
 ## Phone pass (2026-10-28, after the staging push — it should have been done on localhost first)
 
