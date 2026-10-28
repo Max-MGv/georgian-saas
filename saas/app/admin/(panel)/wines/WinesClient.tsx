@@ -508,11 +508,11 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
           {others.length > 0 && <p className="text-xs" style={{ color: C.muted }}>{at('wines.photo.alsoUsedBy', { names: others.join(', ') })}</p>}
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <button type="button" onClick={open} disabled={busy}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: C.wine }}>
+              className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: C.wine }}>
               {busy ? at('wines.savingSuffix') : own ? at('wines.photo.change') : at(v ? 'wines.photo.ownVintage' : 'wines.photo.choose')}
             </button>
             {own && (
-              <button type="button" onClick={clear} disabled={busy} className="text-xs underline px-1" style={{ color: C.muted }}>
+              <button type="button" onClick={clear} disabled={busy} className="text-sm underline px-2 py-2.5" style={{ color: C.muted }}>
                 {at(v ? 'wines.photo.useProduct' : 'wines.photo.remove')}
               </button>
             )}
@@ -899,7 +899,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                               <button type="button" onClick={() => setPicker({ wineId: wine.id, vintageId: v.id })}
                                 aria-label={`${at('wines.photo.change')} — ${v.year}`} title={at('wines.photo.change')}
                                 className="rounded border flex items-center justify-center overflow-hidden flex-shrink-0"
-                                style={{ width: 28, height: 36, borderColor: C.border, backgroundColor: '#faf6f0', borderStyle: rowPhoto ? 'solid' : 'dashed' }}>
+                                style={{ width: 40, height: 52, borderColor: C.border, backgroundColor: '#faf6f0', borderStyle: rowPhoto ? 'solid' : 'dashed' }}>
                                 {rowPhoto
                                   ? <img src={rowPhoto} alt="" className="w-full h-full object-contain" style={{ opacity: v.imagePath ? 1 : 0.45 }} />
                                   : <span className="text-xs" style={{ color: C.faint }}>+</span>}

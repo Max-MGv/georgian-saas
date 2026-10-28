@@ -65,7 +65,10 @@ export default function WinePhotoPicker({
     dialogRef.current?.focus()
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    // Keep the page behind the window from scrolling (on a phone a swipe inside the grid would otherwise move the page).
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow }
   }, [onClose])
 
   const counts = useMemo(() => ({
@@ -131,7 +134,7 @@ export default function WinePhotoPicker({
 
   const tabBtn = (k: Tab, label: string, n: number) => (
     <button key={k} type="button" onClick={() => setTab(k)} aria-pressed={tab === k}
-      className="rounded-full border px-3 py-1 text-xs font-semibold"
+      className="rounded-full border px-3 py-2 text-xs font-semibold"
       style={{
         borderColor: tab === k ? C.wine : C.border, color: tab === k ? C.wine : C.muted,
         backgroundColor: tab === k ? 'color-mix(in srgb, var(--color-brand) 10%, white)' : 'transparent',
@@ -145,7 +148,7 @@ export default function WinePhotoPicker({
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={at('wines.photo.popupTitle', { name: title })}
         className="flex flex-col w-full overflow-hidden rounded-2xl outline-none"
-        style={{ maxWidth: 780, maxHeight: 'min(720px, 92vh)', backgroundColor: '#ffffff', boxShadow: '0 18px 50px rgba(30,20,15,0.28)' }}>
+        style={{ maxWidth: 780, maxHeight: 'min(720px, 92dvh)', backgroundColor: '#ffffff', boxShadow: '0 18px 50px rgba(30,20,15,0.28)' }}>
 
         <div className="flex items-start gap-3 px-4 pt-4 pb-2">
           <div className="min-w-0">
@@ -161,8 +164,9 @@ export default function WinePhotoPicker({
 
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
           <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={at('wines.photo.search')}
-            className="w-full sm:w-auto sm:flex-1 sm:min-w-[180px] rounded-lg border px-3 py-2 text-sm"
-            style={{ borderColor: C.border, color: C.text, backgroundColor: 'var(--site-bg)' }} />
+            className="rounded-lg border px-3 py-2 text-sm"
+            // Takes the whole row on a phone (the tabs wrap under it) and the free space next to the tabs on a wide screen.
+            style={{ flex: '1 1 200px', minWidth: 0, borderColor: C.border, color: C.text, backgroundColor: 'var(--site-bg)' }} />
           <div className="flex flex-wrap gap-1">
             {tabBtn('all', at('wines.photo.tabAll'), counts.all)}
             {tabBtn('unused', at('wines.photo.tabUnused'), counts.unused)}
@@ -170,7 +174,7 @@ export default function WinePhotoPicker({
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto px-4 pb-4" style={{ minHeight: 160 }}>
+        <div className="flex-1 overflow-auto px-4 pb-4" style={{ minHeight: 160, overscrollBehavior: 'contain' }}>
           <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))' }}>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
               className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center text-sm font-semibold gap-1 p-2"
@@ -212,7 +216,7 @@ export default function WinePhotoPicker({
                   )}
                   {!p.builtin && (
                     <button type="button" onClick={() => setConfirmDelete(p.url)} aria-label={`${at('wines.photo.delete')}: ${p.file}`} title={at('wines.photo.delete')}
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                      className="absolute top-1 right-1 w-8 h-8 rounded-full text-white text-sm flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                       style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>🗑</button>
                   )}
                 </div>
@@ -231,18 +235,23 @@ export default function WinePhotoPicker({
 
         {delPhoto && (
           <div role="alert" className="px-4 py-3 border-t text-sm" style={{ backgroundColor: '#fbf0dc', borderColor: C.border, color: C.text }}>
-            <p>
-              {delPhoto.users.length > 0
-                ? at('wines.photo.delUsed', { names: delPhoto.users.join(', ') })
-                : at('wines.photo.delUnused')}
-            </p>
+            <div className="flex items-start gap-3">
+              {/* The photo the question is about, so it is clear which one is being deleted. */}
+              <img src={delPhoto.url} alt="" className="flex-shrink-0 rounded border object-contain"
+                style={{ width: 40, height: 52, borderColor: C.border, backgroundColor: '#faf6f0' }} />
+              <p className="min-w-0">
+                {delPhoto.users.length > 0
+                  ? at('wines.photo.delUsed', { names: delPhoto.users.join(', ') })
+                  : at('wines.photo.delUnused')}
+              </p>
+            </div>
             <div className="flex flex-wrap gap-2 mt-2">
               <button type="button" onClick={handleConfirmDelete} disabled={deleting}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#a3262e' }}>
+                className="px-3 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#a3262e' }}>
                 {delPhoto.users.length > 0 ? at('wines.photo.delYes') : at('wines.photo.delete')}
               </button>
               <button type="button" onClick={() => setConfirmDelete(null)} disabled={deleting}
-                className="px-3 py-1.5 rounded-lg text-sm border" style={{ borderColor: C.border, color: C.muted, backgroundColor: '#fff' }}>
+                className="px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: C.border, color: C.muted, backgroundColor: '#fff' }}>
                 {at('wines.photo.keep')}
               </button>
             </div>
@@ -252,10 +261,10 @@ export default function WinePhotoPicker({
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t" style={{ borderColor: C.border }}>
           <span className="text-xs flex-1 min-w-[180px]" style={{ color: C.muted }}>{hint}</span>
           <div className="flex gap-2 ml-auto">
-            <button type="button" onClick={onClose} className="px-4 py-1.5 rounded-lg text-sm border"
+            <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm border"
               style={{ borderColor: C.border, color: C.muted }}>{at('wines.cancel')}</button>
             <button type="button" disabled={!chosen} onClick={() => chosen && onApply(chosen.url)}
-              className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
+              className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40"
               style={{ backgroundColor: C.wine }}>{at('wines.photo.useThis')}</button>
           </div>
         </div>
