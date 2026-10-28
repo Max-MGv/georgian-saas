@@ -1,14 +1,15 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { asTetri, fromMajor, toMajor, formatTetri } from '@/lib/money'
 import {
   createWine, updateWine, deleteWine, assignWineImage,
   createVintage, updateVintage, deleteVintage, assignVintageImage, toggleVintageActive,
   setWineBookable, setVintageBookable,
 } from '@/app/actions/wines'
-import { uploadWineImage, deleteWineImage } from '@/app/actions/uploadImage'
+import { deleteWineImage } from '@/app/actions/uploadImage'
 import { adminT } from '@/lib/adminT'
+import WinePhotoPicker, { storagePathFromUrl, type PhotoItem } from './WinePhotoPicker'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -22,6 +23,15 @@ const PRODUCT_IMAGES = [
   { path: '/images/products/axoebi.png',  label: 'axoebi' },
   { path: '/images/products/wine5.png',   label: 'wine5' },
   { path: '/images/products/qisi.png',    label: 'qisi' },
+]
+
+// Generic bottle illustrations offered to every winery as a starting point (T-302): plain files in public/images/defaults.
+const DEFAULT_BOTTLES = [
+  { path: '/images/defaults/bottle-red.svg',       labelKey: 'wines.photo.bottleRed' },
+  { path: '/images/defaults/bottle-white.svg',     labelKey: 'wines.photo.bottleWhite' },
+  { path: '/images/defaults/bottle-amber.svg',     labelKey: 'wines.photo.bottleAmber' },
+  { path: '/images/defaults/bottle-rose.svg',      labelKey: 'wines.photo.bottleRose' },
+  { path: '/images/defaults/bottle-sparkling.svg', labelKey: 'wines.photo.bottleSparkling' },
 ]
 
 type WineTypeValue = 'RED' | 'WHITE' | 'AMBER' | 'ROSE'
@@ -144,139 +154,6 @@ function IconX() {
   )
 }
 
-// Extracts the bucket-relative storage path from a Supabase public URL
-// e.g. https://xxx.supabase.co/.../wine-photos/tenantId/file.webp → "tenantId/file.webp"
-function storagePathFromUrl(url: string) {
-  const marker = '/wine-photos/'
-  const idx = url.indexOf(marker)
-  return idx === -1 ? '' : url.slice(idx + marker.length)
-}
-
-function ImagePickerGrid({ current, disabled, onPick, onClear, extraImages, onUpload, onDelete, locale }: {
-  current: string | null; disabled: boolean
-  onPick: (path: string) => void; onClear: () => void
-  extraImages: string[]
-  onUpload: (urls: string[]) => void
-  onDelete: (url: string) => void
-  locale: string
-}) {
-  const at = (key: string) => adminT(locale, key)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
-  const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
-
-  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    if (files.length === 0) return
-    setUploading(true)
-    try {
-      const urls = await Promise.all(files.map(async file => {
-        const fd = new FormData()
-        fd.append('file', file)
-        return uploadWineImage(fd)
-      }))
-      onUpload(urls)
-    } catch (err) {
-      alert(at('wines.uploadFailed') + ' ' + (err instanceof Error ? err.message : at('wines.unknownError')))
-    } finally {
-      setUploading(false)
-      if (fileRef.current) fileRef.current.value = ''
-    }
-  }
-
-  async function handleDeleteUploaded(url: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    const storagePath = storagePathFromUrl(url)
-    if (!storagePath) return
-    await deleteWineImage(storagePath)
-    onDelete(url)
-    if (current === url) onClear()
-  }
-
-  return (
-    <div className="flex flex-wrap gap-2 items-center">
-      {PRODUCT_IMAGES.map(img => {
-        const isActive = current === img.path
-        return (
-          <button
-            key={img.path}
-            type="button"
-            onClick={() => onPick(img.path)}
-            disabled={disabled}
-            title={img.label}
-            className="rounded-lg border overflow-hidden transition-all"
-            style={{
-              width: 52, height: 52,
-              borderColor: isActive ? C.wine : C.border,
-              borderWidth: isActive ? 2 : 1,
-              backgroundColor: '#faf6f0',
-            }}
-          >
-            <img src={img.path} alt={img.label} className="w-full h-full object-contain" />
-          </button>
-        )
-      })}
-
-      {extraImages.map(url => {
-        const isActive = current === url
-        return (
-          <div key={url} className="relative" onMouseEnter={() => setHoveredUrl(url)} onMouseLeave={() => setHoveredUrl(null)}>
-            <button
-              type="button"
-              onClick={() => onPick(url)}
-              disabled={disabled}
-              title={at('wines.uploadedPhoto')}
-              className="rounded-lg border overflow-hidden transition-all"
-              style={{
-                width: 52, height: 52,
-                borderColor: isActive ? C.wine : C.border,
-                borderWidth: isActive ? 2 : 1,
-                backgroundColor: '#faf6f0',
-              }}
-            >
-              <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
-            </button>
-            {hoveredUrl === url && !disabled && (
-              <button
-                type="button"
-                onClick={e => handleDeleteUploaded(url, e)}
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-white"
-                style={{ backgroundColor: 'rgba(0,0,0,0.65)', fontSize: 10, lineHeight: 1 }}
-                title={at('wines.deleteUploadedPhoto')}
-              >
-                ×
-              </button>
-            )}
-          </div>
-        )
-      })}
-
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={disabled || uploading}
-        title={at('wines.uploadOnePhoto')}
-        className="rounded-lg border-2 border-dashed flex items-center justify-center text-lg leading-none"
-        style={{ width: 52, height: 52, borderColor: C.border, color: C.faint }}
-      >
-        {uploading ? <span className="text-xs">…</span> : '+'}
-      </button>
-      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
-
-      {current && (
-        <button
-          type="button"
-          onClick={onClear}
-          disabled={disabled}
-          className="rounded-lg border px-2 text-xs h-[52px]"
-          style={{ borderColor: C.border, color: C.faint }}
-        >
-          {at('wines.clear')}
-        </button>
-      )}
-    </div>
-  )
-}
 
 export default function WinesClient({ wines: initial, uploadedImages: initialUploaded, locale = 'en', wineDetailLevel }: { wines: Wine[]; uploadedImages: string[]; locale?: string; wineDetailLevel: 'PRODUCT' | 'VINTAGE' }) {
   const isVintageMode = wineDetailLevel === 'VINTAGE'
@@ -305,6 +182,8 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
   const [deleteVintageConfirm, setDeleteVintageConfirm] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [imgSaving, setImgSaving] = useState<string | null>(null)
+  // Which wine / vintage the shared photo window is open for (T-302).
+  const [picker, setPicker] = useState<{ wineId: string; vintageId: string | null } | null>(null)
   const [isPending, startTransition] = useTransition()
   const [addNameLocale, setAddNameLocale] = useState<'en' | 'ka'>('en')
   const [editNameLocale, setEditNameLocale] = useState<'en' | 'ka'>('en')
@@ -436,8 +315,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     })
   }
 
-  function handleAssignProductImage(wine: Wine, clickedPath: string) {
-    const newPath = wine.imagePath === clickedPath ? null : clickedPath
+  function handleAssignProductImage(wine: Wine, newPath: string | null) {
     setImgSaving(wine.id)
     startTransition(async () => {
       await assignWineImage(wine.id, newPath)
@@ -536,8 +414,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     })
   }
 
-  function handleAssignVintageImage(wineId: string, v: Vintage, clickedPath: string | null) {
-    const newPath = clickedPath !== null && v.imagePath === clickedPath ? null : clickedPath
+  function handleAssignVintageImage(wineId: string, v: Vintage, newPath: string | null) {
     setImgSaving(v.id)
     startTransition(async () => {
       await assignVintageImage(v.id, newPath)
@@ -549,18 +426,100 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
     })
   }
 
-  // ── Uploaded photo library (shared across all product + vintage pickers) ──
+  // ── Uploaded photo library (shared by the one photo window, T-302) ──
 
   function handleImagesUploaded(urls: string[]) {
     setExtraImages(prev => {
-      const merged = [...prev]
-      for (const u of urls) if (!merged.includes(u)) merged.push(u)
+      const merged = [...urls.filter(u => !prev.includes(u)), ...prev] // newest first, like the server listing
       return merged
     })
   }
 
-  function handleImageDeleted(url: string) {
+  // The server also clears the photo from every wine / vintage that used it; mirror that in local state.
+  async function handleDeletePhoto(url: string) {
+    const storagePath = storagePathFromUrl(url)
+    if (!storagePath) return
+    await deleteWineImage(storagePath)
     setExtraImages(prev => prev.filter(u => u !== url))
+    setWines(prev => prev.map(w => ({
+      ...w,
+      imagePath: w.imagePath === url ? null : w.imagePath,
+      vintages: w.vintages.map(v => v.imagePath === url ? { ...v, imagePath: null } : v),
+    })))
+  }
+
+  const fileOf = (url: string) => decodeURIComponent(url.split('/').pop() ?? url)
+
+  // Who uses a photo, as display names (a vintage's own photo is shown on the public site at either detail level).
+  function photoUsers(url: string): string[] {
+    const users: string[] = []
+    for (const w of wines) {
+      if (w.imagePath === url) users.push(w.name)
+      for (const v of w.vintages) if (v.imagePath === url) users.push(`${w.name} ${v.year}`)
+    }
+    return users
+  }
+
+  // Display name of a photo: the default bottles have a proper name, uploads show their file name.
+  function photoName(url: string) {
+    const d = DEFAULT_BOTTLES.find(b => b.path === url)
+    return d ? at(d.labelKey) : fileOf(url)
+  }
+
+  // Uploaded photos, then the generic default bottles (offered to everyone), then any older built-in product photo a wine
+  // still uses (Nikalas's test photos: shown only while in use, never offered to a winery that does not use them).
+  function buildLibrary(): PhotoItem[] {
+    const uploaded = extraImages.map(url => ({ url, file: fileOf(url), builtin: false, users: photoUsers(url) }))
+    const defaults = DEFAULT_BOTTLES.map(b => ({ url: b.path, file: b.path.split('/').pop() ?? '', label: at(b.labelKey), builtin: true, users: photoUsers(b.path) }))
+    const legacy = PRODUCT_IMAGES
+      .map(b => ({ url: b.path, file: b.path.split('/').pop() ?? b.label, builtin: true, users: photoUsers(b.path) }))
+      .filter(b => b.users.length > 0)
+    return [...uploaded, ...defaults, ...legacy]
+  }
+
+  // Photo field: current picture + buttons, in place of the old strip of thumbnails.
+  function photoField(wine: Wine, v: Vintage | null) {
+    const obj = v ?? wine
+    const own = obj.imagePath
+    const shown = own ?? (v ? wine.imagePath : null)
+    const busy = imgSaving === obj.id
+    const others = own ? photoUsers(own).filter(n => n !== (v ? `${wine.name} ${v.year}` : wine.name)) : []
+    const open = () => setPicker({ wineId: wine.id, vintageId: v?.id ?? null })
+    const clear = () => v ? handleAssignVintageImage(wine.id, v, null) : handleAssignProductImage(wine, null)
+    const dim = !!v && !own
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={open} disabled={busy} aria-label={at(own ? 'wines.photo.change' : 'wines.photo.choose')}
+          className="rounded-lg border flex items-center justify-center overflow-hidden flex-shrink-0"
+          style={{ width: v ? 48 : 80, height: v ? 62 : 100, borderColor: C.border, backgroundColor: '#faf6f0', borderStyle: shown ? 'solid' : 'dashed' }}>
+          {shown
+            ? <img src={shown} alt="" className="w-full h-full object-contain" style={{ opacity: dim ? 0.45 : 1 }} />
+            : <span className="text-xs px-1 text-center" style={{ color: C.faint }}>{at('wines.photo.none')}</span>}
+        </button>
+        <div className="min-w-0 space-y-1">
+          {v ? (
+            <span className="inline-block text-xs px-2 py-0.5 rounded-full"
+              style={own ? { backgroundColor: '#eef5e1', color: '#4d7a12', fontWeight: 600 } : { border: `1px solid ${C.border}`, color: C.faint }}>
+              {own ? at('wines.photo.own') : at(wine.imagePath ? 'wines.photo.inherits' : 'wines.photo.none')}
+            </span>
+          ) : (
+            <p className="text-xs font-mono break-all" style={{ color: C.muted }}>{own ? photoName(own) : at('wines.photo.noneShown')}</p>
+          )}
+          {others.length > 0 && <p className="text-xs" style={{ color: C.muted }}>{at('wines.photo.alsoUsedBy', { names: others.join(', ') })}</p>}
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            <button type="button" onClick={open} disabled={busy}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: C.wine }}>
+              {busy ? at('wines.savingSuffix') : own ? at('wines.photo.change') : at(v ? 'wines.photo.ownVintage' : 'wines.photo.choose')}
+            </button>
+            {own && (
+              <button type="button" onClick={clear} disabled={busy} className="text-xs underline px-1" style={{ color: C.muted }}>
+                {at(v ? 'wines.photo.useProduct' : 'wines.photo.remove')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // ── Shared product form (add + edit) ──────────────────────────────────
@@ -727,7 +686,6 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
         const isExpanded = expandedId === wine.id
         const isDetailsTab = isExpanded && activeTab === 'details'
         const isSaving = saving === wine.id
-        const isImgSaving = imgSaving === wine.id
 
         return (
           <div
@@ -861,19 +819,8 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                     {productFields(productDraft, setProductDraft, editNameLocale, setEditNameLocale)}
 
                     <div>
-                      <label className="text-xs mb-2 block" style={{ color: C.faint }}>
-                        {at('wines.productPhoto')} {isImgSaving ? <span style={{ color: C.faint }}>— {at('wines.savingSuffix')}</span> : wine.imagePath ? <span style={{ color: '#5a7c14' }}>— {at('wines.assignedSuffix')}</span> : <span>— {at('wines.noneSuffix')}</span>}
-                      </label>
-                      <ImagePickerGrid
-                        current={wine.imagePath}
-                        disabled={isImgSaving}
-                        onPick={path => handleAssignProductImage(wine, path)}
-                        onClear={() => handleAssignProductImage(wine, wine.imagePath!)}
-                        extraImages={extraImages}
-                        onUpload={handleImagesUploaded}
-                        onDelete={handleImageDeleted}
-                        locale={locale}
-                      />
+                      <label className="text-xs mb-2 block" style={{ color: C.faint }}>{at('wines.productPhoto')}</label>
+                      {photoField(wine, null)}
                     </div>
 
                     <div className="flex gap-2 pt-1">
@@ -899,7 +846,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                     {wine.vintages.map(v => {
                       const isVEditing = editingVintageId === v.id
                       const isVSaving = saving === v.id
-                      const isVImgSaving = imgSaving === v.id
+                      const rowPhoto = v.imagePath ?? wine.imagePath
 
                       return (
                         <div key={v.id} className="rounded-lg border overflow-hidden" style={{ borderColor: C.border, backgroundColor: '#ffffff', opacity: v.active ? 1 : 0.6 }}>
@@ -926,19 +873,8 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                               </div>
                               {isVintageMode && vintageFields(vintageDraft, setVintageDraft)}
                               <div>
-                                <label className="text-xs mb-2 block" style={{ color: C.faint }}>
-                                  {at('wines.vintagePhotoOverride')} {isVImgSaving ? <span>— {at('wines.savingSuffix')}</span> : v.imagePath ? <span style={{ color: '#5a7c14' }}>— {at('wines.overrideSetSuffix')}</span> : <span>— {at('wines.usingProductPhotoSuffix')}</span>}
-                                </label>
-                                <ImagePickerGrid
-                                  current={v.imagePath}
-                                  disabled={isVImgSaving}
-                                  onPick={path => handleAssignVintageImage(wine.id, v, path)}
-                                  onClear={() => handleAssignVintageImage(wine.id, v, null)}
-                                  extraImages={extraImages}
-                                  onUpload={handleImagesUploaded}
-                                  onDelete={handleImageDeleted}
-                                  locale={locale}
-                                />
+                                <label className="text-xs mb-2 block" style={{ color: C.faint }}>{at('wines.vintagePhotoOverride')}</label>
+                                {photoField(wine, v)}
                               </div>
                               <div className="flex items-center gap-2">
                                 <input type="checkbox" id={`v-active-${v.id}`} checked={vintageDraft.active}
@@ -960,11 +896,19 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                             </div>
                           ) : (
                             <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+                              <button type="button" onClick={() => setPicker({ wineId: wine.id, vintageId: v.id })}
+                                aria-label={`${at('wines.photo.change')} — ${v.year}`} title={at('wines.photo.change')}
+                                className="rounded border flex items-center justify-center overflow-hidden flex-shrink-0"
+                                style={{ width: 28, height: 36, borderColor: C.border, backgroundColor: '#faf6f0', borderStyle: rowPhoto ? 'solid' : 'dashed' }}>
+                                {rowPhoto
+                                  ? <img src={rowPhoto} alt="" className="w-full h-full object-contain" style={{ opacity: v.imagePath ? 1 : 0.45 }} />
+                                  : <span className="text-xs" style={{ color: C.faint }}>+</span>}
+                              </button>
                               <p className="text-sm font-bold" style={{ color: C.text }}>{v.year}</p>
                               <p className="text-sm" style={{ color: C.muted }}>{formatTetri(asTetri(v.price))} / {at('wines.bottle')}</p>
                               {isVintageMode && vintageMetaBadges(v)}
                               {v.imagePath && (
-                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.overrideImageBadge')}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#f0f7e6', color: '#5a7c14' }}>{at('wines.photo.own')}</span>
                               )}
                               {!v.active && (
                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>
@@ -1092,6 +1036,32 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
           + {at('wines.addWine')}
         </button>
       )}
+
+      {picker && (() => {
+        const w = wines.find(x => x.id === picker.wineId)
+        if (!w) return null
+        const v = picker.vintageId ? w.vintages.find(x => x.id === picker.vintageId) ?? null : null
+        if (picker.vintageId && !v) return null
+        const target = v ?? w
+        return (
+          <WinePhotoPicker
+            locale={locale}
+            title={v ? `${w.name} ${v.year}` : w.name}
+            vintageYear={v?.year}
+            inheritsProductPhoto={!!v && !v.imagePath}
+            photos={buildLibrary()}
+            current={target.imagePath}
+            onApply={url => {
+              if (v) handleAssignVintageImage(w.id, v, url)
+              else handleAssignProductImage(w, url)
+              setPicker(null)
+            }}
+            onUploaded={handleImagesUploaded}
+            onDeletePhoto={handleDeletePhoto}
+            onClose={() => setPicker(null)}
+          />
+        )
+      })()}
 
     </div>
   )

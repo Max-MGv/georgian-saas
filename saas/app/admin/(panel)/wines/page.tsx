@@ -10,7 +10,10 @@ import WinesClient from './WinesClient'
 async function listUploadedWineImages(tenantId: string): Promise<string[]> {
   try {
     const supabase = createServiceClient()
-    const { data } = await supabase.storage.from('wine-photos').list(tenantId, { limit: 200 })
+    // Newest first; 1000 is the API's page size, far above what a winery uploads.
+    const { data } = await supabase.storage.from('wine-photos').list(tenantId, {
+      limit: 1000, sortBy: { column: 'created_at', order: 'desc' },
+    })
     if (!data) return []
     const base = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/wine-photos`
     return data

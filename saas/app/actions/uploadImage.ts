@@ -3,6 +3,8 @@
 import { requireAdmin } from '@/lib/requireAdmin'
 import { getTenantId } from '@/lib/tenant'
 import { createServiceClient } from '@/lib/supabase/service'
+import { withTenantDb } from '@/lib/db'
+import { revalidatePath } from 'next/cache'
 import sharp from 'sharp'
 
 const BUCKET = 'backgrounds'
@@ -88,7 +90,9 @@ export async function uploadWineImage(formData: FormData): Promise<string> {
   return data.publicUrl
 }
 
-// storagePath is the bucket-relative path, e.g. "tenantId/1234567890-ab12cd.webp"
+// storagePath is the bucket-relative path, e.g. "tenantId/1234567890-ab12cd.webp".
+// T-302: every wine / vintage still pointing at the photo is cleared first, so nothing is left with a dead link
+// (the file is removed last: a leftover file is harmless, a leftover reference shows a broken image).
 export async function deleteWineImage(storagePath: string): Promise<void> {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -103,5 +107,12 @@ export async function deleteWineImage(storagePath: string): Promise<void> {
   }
 
   const supabase = createServiceClient()
+  const url = supabase.storage.from(WINE_BUCKET).getPublicUrl(storagePath).data.publicUrl
+  await withTenantDb(tenantId, async tx => {
+    await tx.wine.updateMany({ where: { tenantId, imagePath: url }, data: { imagePath: null } })
+    await tx.wineVintage.updateMany({ where: { tenantId, imagePath: url }, data: { imagePath: null } })
+  })
   await supabase.storage.from(WINE_BUCKET).remove([storagePath])
+  revalidatePath('/wines')
+  revalidatePath('/admin/wines')
 }
