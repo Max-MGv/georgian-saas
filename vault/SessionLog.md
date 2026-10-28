@@ -30,6 +30,7 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 - **Not done:** Playwright spec; Nikalas's production data not looked at (read-only check offered, waiting for Max's go); release note for clients not drafted (draft it with the production merge: before/after shots, show Wines → Change photo); Georgian wording is Claude's.
 - **Open for Max:** test on staging (checklist on T-302 "Waiting for me"); then say go for production (code-only merge, staging → master).
 - Lesson: local dev served stale code twice after edits (first Turbopack disk cache, then a missed file watch) — see the gotcha line in the feature note.
+- **Phone pass (Max: "should have been done on localhost first"):** measured at 375 px, EN + KA, on localhost and fixed — tap targets 24–34 px → 32–42 px, popup `dvh` + page lock, delete warning shows the photo; details in the feature note "Phone pass". Rule 12.2 now says the phone pass comes BEFORE any push to staging. Wine row names are squeezed out at phone width (existing, not T-302, not fixed).
 
 ---
 

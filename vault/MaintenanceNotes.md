@@ -1490,3 +1490,4 @@ Feature note: [[Feature 242-244 - Sheet columns, What's new folding, close own r
 4. **Adding a default bottle** = drop an SVG in `public/images/defaults/`, add it to `DEFAULT_BOTTLES` in `WinesClient.tsx`, add its `wines.photo.bottle*` label in EN and KA in `lib/adminT.ts`.
 5. **The old product photos are listed only while a wine uses one** (`buildLibrary()`); do not add them to a default list (Max, 2026-10-28: they are Nikalas's test photos, not for every winery).
 6. **Upload limits** are unchanged: Server Action body 4 MB per file, resized to 2000 px WebP (`uploadWineImage`).
+7. **Phone sizes are part of the design** (tap targets ≥ 40 px, popup `92dvh`, page behind locked): when changing `WinePhotoPicker` or `photoField()` re-measure at 375 px in English and Georgian. Dev CSS can lag behind edits — see the Phone pass section of the feature note.

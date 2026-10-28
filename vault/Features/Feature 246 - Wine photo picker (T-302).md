@@ -48,3 +48,15 @@ Upload 2–3 photos; set a product photo and a vintage photo; "Use product photo
 - Not run against Nikalas's production data (does he use only the six old photos or also uploads?).
 - No Playwright spec for the picker (none existed for the old one either).
 - Release note for clients not drafted yet — draft it with the production merge, with before/after shots and where it is (Wines → Change photo) (Rule 12.4).
+
+## Phone pass (2026-10-28, after the staging push — it should have been done on localhost first)
+
+Max: "do phone checks to optimize for phone; this should have been done on localhost first before shipping to staging" (ClaudeInstructions Rule 12.2 now says so explicitly). Done on localhost at 375 px, English and Georgian, measured with `getBoundingClientRect`. Found and fixed (commit follows `c26283b`):
+
+- **Tap targets too small:** "Change photo" 28 px, "Remove" / "Use product photo" 16 px, tabs 26 px, bin 24 px, footer buttons 34 px, vintage-row thumbnail 28 × 36 → now 40 / 40 / 34 / 32 / 42 / 40 × 52. (Desktop gets the same larger sizes; no `sm:` variants, see the Tailwind note below.)
+- **Popup height** `92vh` → `92dvh` (a phone's address bar made it overflow); the page behind the popup is locked while it is open and the grid uses `overscroll-behavior: contain` (a swipe inside the grid used to scroll the page).
+- **Delete warning** now shows a thumbnail of the photo it is about (before, nothing said which photo).
+- Search box is a flex item (`flex: 1 1 200px`): own row on a phone, next to the tabs on a wide screen.
+- Checked OK: no sideways scroll, product field, vintage rows, vintage edit form, popup grid (2 columns), Georgian text (tabs wrap to two rows, nothing overflows).
+- **Not mine, seen on the way:** in the collapsed wine rows at phone width the wine NAME is squeezed out by the toggles/icons (the header row was not touched by T-302). Not fixed (not asked).
+- **Local dev gotcha (Tailwind):** after edits the dev server often serves stale JS **and stale CSS** — new utility classes such as `h-13`, `sm:flex-1`, `overscroll-contain` were simply missing from the generated CSS until a full restart, and sometimes still after one. Verify layout changes by measuring, and prefer inline styles or classes already used elsewhere for anything that must be right locally. Fix routine: stop server, remove the two junctions in `.next/dev/node_modules` with `rmdir`, delete `.next`, restart, navigate again (the pane re-opens `/` after a restart).
