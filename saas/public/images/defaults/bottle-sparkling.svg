@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 160" role="img" aria-label="bottle-sparkling">
+<ellipse cx="50" cy="156" rx="26" ry="2.5" fill="#000" opacity=".12"/>
+<path d="M42 30 h16 v22 q16 8 16 30 v62 q0 6 -6 6 h-36 q-6 0 -6 -6 v-62 q0 -22 16 -30z" fill="#2d4a38"/>
+<path d="M42 30 h16 v22 q16 8 16 30 v62 q0 6 -6 6 h-8 v-4 q-4 -4 -4 -50 q0 -50 -14 -66z" fill="#fff" opacity=".07"/>
+<rect x="40" y="14" width="20" height="30" rx="3" fill="#c9a84c"/>
+<rect x="38" y="38" width="24" height="6" rx="2" fill="#c9a84c"/>
+<rect x="29" y="92" width="42" height="40" rx="2" fill="#f3ead2"/>
+<rect x="36" y="102" width="28" height="3" fill="#2a3a2e" opacity=".7"/><rect x="40" y="110" width="20" height="3" fill="#2a3a2e" opacity=".45"/>
+<rect x="31" y="58" width="5" height="88" rx="2.5" fill="#fff" opacity=".16"/>
+</svg>

@@ -547,6 +547,18 @@ Full tracking: [[Plan-WineOrderFeatures]] (Chunks 1–15, all ✅, production ru
 - [ ] **Max: publish the release notes on the production board** — drafts 2026-10-24 (T-215, 5 before/after pairs; Georgian text is Claude's own wording, read it first) and 2026-10-23 (T-152) → use the new switches. Optional: retake the 24 Oct shots (they show the test company name "ZZ Demo Tours (T-215 shots)")
 - [ ] Not done: side-panel / phone-width screenshots for the T-215 note; Georgian order page checked only by i18n parity, not by eye
 
+## v1.20 — Add-ons + wine for the table, sheet columns, What's new folding, own-report closing ✅ ON PRODUCTION 2026-10-27 (master `db1df4a` → `e37cff2` → `e002aaf` → `243d176`)
+[[Plan-AddOnsAndWine]] · [[Feature 242-244 - Sheet columns, What's new folding, close own report]] · FeatureLog #240–#245 · MaintenanceNotes §40–§41 · SessionLog 2026-10-27 ("START HERE").
+- [x] **T-7 Add-ons** (grouped, per person / per piece / flat) + **T-22 wine for the table**, guest purchases, wine statistics from every source — 5 additive migrations (`db1df4a`)
+- [x] Wine on a booking re-priced when an admin changes or links its company, before payment (D-23; no migration)
+- [x] **T-151** Booking sheet: admin picks which columns print, saved per winery; "Kitchen total" renamed "Total guests"
+- [x] **T-301** What's new folded by release date and by change card; clients can close their own report from My Reports (alone → ticket closed as Obsolete; merged duplicates → only that report leaves; Done tickets refused)
+- [x] Production → staging ticket copy **cancelled** (code removed, P-tickets deleted from dev, Vercel env vars + credentials line removed)
+- [x] Release-note draft for the last four items (T-151, What's new, close-own-report, wine follows company) — hidden on the production board, with before/after screenshots
+- [ ] **Max:** publish that draft (id `cmvqwui2t0000lc07i88w0k11`; check the Georgian wording); attach the Wines → "On bookings" screenshot to the published 27 Oct wine entry
+- [ ] **Max:** decide about Vercel Functions Storage (12.46 / 10 GB on Hobby) — see SessionLog START HERE
+- [ ] T-311: tier 5 (Flitt hosted card page) tests still failing
+
 ---
 
 ## Draft Ideas / Backlog (not planned yet — notes only)

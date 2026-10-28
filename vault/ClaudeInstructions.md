@@ -252,11 +252,18 @@ build and two runs would have done). Full story: `vault/Plan-OrderPageMirror.md`
 2. **QA before handing over.** Besides the main-path tests, run an edge-case pass through the real UI: add / remove,
    empty and invalid values (dates like 31/02, quantities 0 / 2.5 / 1000), Cancel, paid / locked states, phone width.
    Reproduce every failure step by step before fixing it.
+   **The phone pass happens on localhost BEFORE anything is pushed to staging** (Max, 2026-10-28, T-302: "this should have been
+   done on localhost first before shipping to staging"). Every new screen, popup and button: 375 px wide, in English AND
+   Georgian (longer text), no sideways scroll, tap targets at least 40 px tall, popups sized with `dvh` and the page behind
+   locked, delete / confirm steps readable. Measure with `getBoundingClientRect`, don't judge by eye only.
 3. **Test harness hygiene.** Read locators from the real page first; size waits to the dev server (saves can take 7 s
    locally); reset the page after a failed case so one failure can't cascade; **never edit app code while a test run is
    going** (recompiles spoil the run — `playwright/KNOWN-ISSUES.md`).
 4. **Every release note entry gets screenshots** (before/after where something visibly changed), drafted with the
-   release, not afterwards. The draft lives on the **production** board. Routine: `vault/Plan-ReleaseNotes.md`.
+   release, not afterwards. **Draft the note in the same step as the production merge — don't wait to be asked** (2026-10-27:
+   T-151, T-301 and the wine re-pricing shipped with no note; Max had to ask). **An entry must also show WHERE the client
+   switches the feature on** (the 27 Oct wine entry said "switch On bookings on" but never showed the Wines page — Max: "how will
+   they know?"). A published release can't be edited through the API: add that picture to the draft, or ask Max to unpublish first. The draft lives on the **production** board. Routine: `vault/Plan-ReleaseNotes.md`.
 5. **Edit files with the editor tool**, not `node -e` / `sed` string patches — CRLF line endings and escaping broke
    those repeatedly.
 
