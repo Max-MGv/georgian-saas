@@ -21,7 +21,14 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
-## 2026-10-28 (evening) — T-319 + T-320 built, phone-passed on localhost, pushed to STAGING only (not on production)
+## 2026-10-29 — T-319 + T-320 SHIPPED TO PRODUCTION on Max's go ("draft release notes, screenshots, action points and push to master") — master `3e87079`
+
+- Merge commit `3e87079` (no migrations; code = two component files; vault notes). Backups taken by the hook before the push (prod `2026-10-29_113255_prod_…`, dev). Production deploy `dpl_C9yfVLh…`.
+- **Release note drafted (hidden)** on the production board: release `cmvt899q20000ld08mhdr8y4k`, dated 2026-10-29, entries `cmvt89kjx0002ld08x778nc6m` (T-319) and `cmvt89li50004ld086psjzexl` (T-320), EN + KA (Georgian = Claude's wording), a before/after phone pair each. "Before" shots were taken by temporarily swapping the two files for their `origin/master` versions on the local dev server (dev DB, test winery), then `git checkout --` restoring them (tree verified clean) — a 2-minute stand-in for the worktree routine; fine when only 1–2 files changed and no schema moved.
+- Max read my question on T-319 as answered "it's fine" → treated as **bookings only**; Wine-orders pill not built.
+- Open for Max: publish the draft; mark T-319 / T-320 Done after trying them (see MyToDo 2026-10-29).
+
+## 2026-10-28 (evening) — T-319 + T-320 built, phone-passed on localhost, pushed to STAGING first
 
 - **T-319** (`20db5b0`): phone booking cards in Admin → Orders: the status pill is a button that opens the existing desktop status menu (no need to open the booking). `app/admin/(panel)/orders/OrdersTable.tsx`. **T-320** (`04f5134`): Admin → Wines row header wraps on a phone (name + photo + chevron, then controls; 40px targets; vintage count under the name). `app/admin/(panel)/wines/WinesClient.tsx`. No migration, no money, no public form.
 - QA on localhost at 375px EN + KA + desktop: `saas/scripts/_qa/_qa_t319_t320.ts` (untracked) — all checks pass. Opened the status menu only; **no booking status was actually changed and nothing deleted**. Dev backup taken first (language toggle writes a setting; restored to `en`).

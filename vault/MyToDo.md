@@ -12,7 +12,16 @@ Things Max needs to do manually that are **not tickets**. Claude updates this af
 
 ---
 
-## 🆕 2026-10-28 — T-302 wine photo picker is ON PRODUCTION (master `7d462e7`). Your chores
+## 🆕 2026-10-29 — T-319 + T-320 are ON PRODUCTION (master `3e87079`). Your chores
+
+- [ ] **Publish the release-note draft** — production board → Super Admin → Releases → the hidden draft dated 2026-10-29 (id `cmvt899q20000ld08mhdr8y4k`, 2 changes, 4 pictures: before/after on a phone). Read it in English and Georgian first (Georgian is Claude's wording), then switch **Published**, then **Shown to clients** when you want.
+- [ ] Try both on production on a phone: **Orders** → tap the status label on a booking (it has a small arrow) — use a real booking only if you want it to change; **Wines** → every wine shows its name. Then mark **T-319** and **T-320** Done on the board.
+- [ ] Decision still open on T-319: should the phone Wine-orders card get the same status pill? (Not built — the report's picture was the bookings list.)
+- Older drafts (27 + 28 Oct) now show as published on the production board.
+
+---
+
+## 2026-10-28 — T-302 wine photo picker is ON PRODUCTION (master `7d462e7`). Your chores
 
 - [ ] **Publish the release note draft** — production board → Super Admin → Releases → the hidden draft dated 2026-10-28 (id `cmvs1i3r60000l6082r32fv2e`, "Wine photos are easier to manage"): read it in English and Georgian (Georgian is Claude's wording), then **Published**, then **Shown to clients**. It has 3 entries and 17 pictures.
 - [ ] Try the new photo window on production, on a phone: Wines → open a wine → Wine Details → Change photo (and the small photo on a vintage row). Then mark **T-302 Done** on the board when happy.
