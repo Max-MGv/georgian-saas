@@ -3,9 +3,9 @@
 import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type OrderContactView } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
-import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers } from '@/lib/payments/manualPayment'
-import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
-import { linkEmailRefusal } from '@/lib/payments/openLink'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
+import { startTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
+import { linkEmailRefusal, findOpenAdminLink } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
@@ -1180,6 +1180,76 @@ export async function startOrderTopUpCheckout(
   // checkout actually settles, through the real Flitt callback (settle.ts),
   // same as any other checkout. No revalidatePath needed here.
   return result
+}
+
+/**
+ * The "Card" step of "How was this paid?" (T-318 Chunk 5): a card link for the FULL amount still owed on an
+ * unpaid booking — not editable, exactly like Bank / Cash. Asking again while a link for that amount is
+ * open hands the same link back (`reused`). Returns what the popup shows: the link, when it stops working,
+ * the amount, and whether the guest has an email address to send it to.
+ *
+ * The order only turns Paid when Flitt confirms (settle.ts) — nothing is marked here.
+ */
+export async function startOrderCardPayment(orderId: string): Promise<
+  | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: boolean }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { name: true, surname: true, date: true, timeSlot: true, email: true, totalPrice: true, paidAt: true, stage: true },
+    }),
+    paid: await livePaidSum(tx, { orderId }),
+  }))
+  const order = found.order
+  if (!order) return { error: 'Order not found.' }
+  if (order.paidAt != null) return { error: 'This booking is already paid.' }
+  const refused = linkRefusal({ stage: order.stage, total: order.totalPrice })
+  if (refused) return { error: refused }
+  const amount = balanceDue(order.totalPrice, found.paid)
+  if (amount <= 0) return { error: 'There is nothing left to collect on this booking.' }
+
+  const result = await startTopUpCheckout({
+    orderId,
+    tenantId,
+    amount,
+    orderDesc: `Card payment, ${order.name} ${order.surname}, ${order.date.toLocaleDateString('en-GB')} ${order.timeSlot}`,
+  })
+  if ('error' in result) return result
+  return {
+    success: true,
+    checkoutUrl: result.checkoutUrl,
+    paymentId: result.paymentId,
+    amount,
+    expiresAt: result.expiresAt,
+    reused: result.reused === true,
+    canEmail: Boolean(order.email),
+  }
+}
+
+/**
+ * What the Card popup polls (every few seconds while open) and what the picker asks before recording
+ * Bank / Cash: is the booking Paid yet, and is a card link still open (so the admin can be warned that
+ * the guest could still pay it — a link cannot be cancelled). Read-only.
+ */
+export async function getOrderCardState(orderId: string): Promise<
+  | { paid: boolean; openLink: { amount: number; expiresAt: string } | null }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } }),
+    open: await findOpenAdminLink(tx, { orderId }),
+  }))
+  if (!found.order) return { error: 'Order not found.' }
+  return {
+    paid: found.order.paidAt != null,
+    openLink: found.open ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString() } : null,
+  }
 }
 
 /**

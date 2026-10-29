@@ -80,7 +80,7 @@ export function mintTopUpFlittOrderId(orderId: string): string {
  * not marked Paid — settle.ts), and an order without a price has nothing to charge ("Set the price
  * first", the same words Q-11 uses for Mark paid).
  */
-function linkRefusal(o: { stage: string; total: number | null }): string | null {
+export function linkRefusal(o: { stage: string; total: number | null }): string | null {
   if (o.stage === 'CANCELLED') return CANCELLED_REFUSAL
   if (o.total === null || o.total <= 0) return 'Set the price first.'
   return null

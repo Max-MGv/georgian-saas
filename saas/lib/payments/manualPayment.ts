@@ -35,7 +35,7 @@ type OrderRef = { orderId?: string | null; wineOrderId?: string | null }
  * What this order has already been paid: every settled, non-reversed payment (card or manual).
  * The same sum `balanceDue` callers use, so "mark as paid" and the balance can never disagree.
  */
-async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
+export async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
   const sum = await tx.payment.aggregate({
     where: {
       ...(ref.orderId ? { orderId: ref.orderId } : { wineOrderId: ref.wineOrderId ?? undefined }),
