@@ -120,7 +120,8 @@ async function main() {
     // ── Part C: the real return route over HTTP ──────────────────────────────────
     if (HTTP) {
       console.log(`\nPart C — return route at ${HTTP}\n`)
-      async function viaReturnRoute(pid: string, fields: Record<string, string | number>) {
+      // An arrow, not a function declaration: a declaration loses the `secret` narrowing above.
+      const viaReturnRoute = async (fields: Record<string, string | number>) => {
         const res = await fetch(`${HTTP}/api/payments/flitt/return`, {
           method: 'POST',
           redirect: 'manual',
@@ -131,19 +132,19 @@ async function main() {
       }
       const h1 = await makeBooking('H1'); orderIds.push(h1.id)
       await makePayment({ orderId: h1.id }, `${PREFIX}-h1`, 25000)
-      const loc1 = await viaReturnRoute(`${PREFIX}-h1`, approved(`${PREFIX}-h1`, 25000))
+      const loc1 = await viaReturnRoute(approved(`${PREFIX}-h1`, 25000))
       check('guest checkout → /payment/result?status=success (no kind)', /\/payment\/result\?status=success$/.test(loc1), loc1)
 
       const h2 = await makeBooking('H2'); orderIds.push(h2.id)
       await makePayment({ orderId: h2.id }, `${PREFIX}-h2`, 5000, `${h2.id}-topup-zz`)
-      const loc2 = await viaReturnRoute(`${PREFIX}-h2`, approved(`${PREFIX}-h2`, 5000))
+      const loc2 = await viaReturnRoute(approved(`${PREFIX}-h2`, 5000))
       check('admin-link booking → ?status=success&kind=link', /\/payment\/result\?status=success&kind=link$/.test(loc2), loc2)
-      const loc2b = await viaReturnRoute(`${PREFIX}-h2`, approved(`${PREFIX}-h2`, 5000))
+      const loc2b = await viaReturnRoute(approved(`${PREFIX}-h2`, 5000))
       check('…and when the webhook already settled it (second delivery) → still kind=link', /status=success&kind=link$/.test(loc2b), loc2b)
 
       const h3 = await makeBooking('H3'); orderIds.push(h3.id)
       await makePayment({ orderId: h3.id }, `${PREFIX}-h3`, 5000, `${h3.id}-topup-zz`)
-      const loc3 = await viaReturnRoute(`${PREFIX}-h3`, { payment_id: `${PREFIX}-h3`, order_status: 'declined', amount: 5000, currency: 'GEL' })
+      const loc3 = await viaReturnRoute({ payment_id: `${PREFIX}-h3`, order_status: 'declined', amount: 5000, currency: 'GEL' })
       check('declined admin link → ?status=failed (no kind)', /\/payment\/result\?status=failed$/.test(loc3), loc3)
 
       const wh = await db.wineOrder.create({
@@ -151,7 +152,7 @@ async function main() {
       })
       wineIds.push(wh.id)
       await makePayment({ wineOrderId: wh.id }, `${PREFIX}-h4`, 1500, `${wh.id}-topup-zz`)
-      const loc4 = await viaReturnRoute(`${PREFIX}-h4`, approved(`${PREFIX}-h4`, 1500))
+      const loc4 = await viaReturnRoute(approved(`${PREFIX}-h4`, 1500))
       check('wine fee link → ?status=success (no kind, wording unchanged)', /\/payment\/result\?status=success$/.test(loc4), loc4)
       // `after()` runs the notification just after the response; give it time before the rows are deleted.
       await new Promise(r => setTimeout(r, 6000))
