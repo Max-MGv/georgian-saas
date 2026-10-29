@@ -695,7 +695,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
           >
             {/* ── Product row ── */}
             <div
-              className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+              className="flex flex-wrap md:flex-nowrap items-center gap-x-3 gap-y-2 px-4 py-3 cursor-pointer"
               onClick={() => toggleExpand(wine.id)}
             >
               <div className="w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ backgroundColor: '#faf6f0' }}>
@@ -708,8 +708,12 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold truncate" style={{ color: C.text }}>{wine.name}</p>
-                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>}
+                  {!wine.active && <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap" style={{ backgroundColor: 'var(--site-bg)', color: C.faint }}>{at('wines.hidden')}</span>}
                 </div>
+                {/* Phone only: the vintage count sits under the name so the four controls fit on one line (T-320). */}
+                <p className="md:hidden text-xs mt-0.5" style={{ color: C.faint }}>
+                  {wine.vintages.length} {wine.vintages.length !== 1 ? at('wines.vintage.plural') : at('wines.vintage.singular')}
+                </p>
                 {!isVintageMode && (
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                     <Badge>{TYPE_LABEL[wine.wineType]}</Badge>
@@ -720,8 +724,11 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                 )}
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                <span className="text-xs whitespace-nowrap" style={{ color: C.faint }}>
+              {/* T-320: on a phone the name gets the whole first line (photo, name, chevron) and these
+                  controls wrap onto a second line; from md up it is one row as before. Icon buttons are
+                  40px squares on a phone. */}
+              <div className="order-3 md:order-2 w-full md:w-auto flex flex-wrap items-center gap-2 md:flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <span className="hidden md:inline text-xs whitespace-nowrap" style={{ color: C.faint }}>
                   {wine.vintages.length} {wine.vintages.length !== 1 ? at('wines.vintage.plural') : at('wines.vintage.singular')}
                 </span>
                 {/* Offer on bookings (T-22): a switch — on only when every vintage is. A vintage-level winery sees "2/3" while partly on. */}
@@ -732,7 +739,7 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                     <button type="button" role="switch" aria-checked={all}
                       onClick={() => handleToggleBookable(wine)} disabled={isSaving || wine.vintages.length === 0}
                       title={at('wines.bookable.title')} aria-label={at('wines.bookable.label')}
-                      className="flex items-center gap-1.5 text-xs whitespace-nowrap rounded-full border pl-1.5 pr-2.5 py-0.5 disabled:opacity-40"
+                      className="flex items-center gap-1.5 text-xs whitespace-nowrap rounded-full border pl-1.5 pr-2.5 py-0.5 min-h-10 md:min-h-0 disabled:opacity-40"
                       style={{ borderColor: all ? '#86efac' : C.border, color: all ? '#15803d' : C.faint, backgroundColor: all ? '#f0fdf4' : 'transparent' }}>
                       <span aria-hidden className="inline-block w-6 h-3.5 rounded-full relative" style={{ backgroundColor: all ? '#16a34a' : on > 0 ? '#facc15' : '#d1c4b0' }}>
                         <span className="absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all" style={{ left: all ? 12 : 2 }} />
@@ -743,46 +750,48 @@ export default function WinesClient({ wines: initial, uploadedImages: initialUpl
                 })()}
                 <button onClick={() => handleToggleProductActive(wine)} disabled={isSaving}
                   title={wine.active ? at('wines.hideFromCatalogue') : at('wines.showInCatalogue')}
-                  className="p-1 rounded border"
+                  className="p-1 rounded border min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
                   style={{ borderColor: C.border, color: C.muted }}>
                   {wine.active ? <IconEye /> : <IconEyeOff />}
                 </button>
                 <button onClick={() => selectTab(wine, 'details')} title={at('wines.editWine')}
-                  className="p-1 rounded border"
+                  className="p-1 rounded border min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
                   style={{ borderColor: C.border, color: C.muted }}>
                   <IconPencil />
                 </button>
                 {deleteConfirm === wine.id ? (
                   <>
                     <button onClick={() => handleDeleteProduct(wine.id)} disabled={isSaving} title={at('wines.confirmDelete')}
-                      className="p-1 rounded border"
+                      className="p-1 rounded border min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
                       style={{ borderColor: '#86efac', color: '#16a34a' }}>
                       <IconCheck />
                     </button>
                     <button onClick={() => setDeleteConfirm(null)} title={at('wines.cancel')}
-                      className="p-1 rounded border"
+                      className="p-1 rounded border min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
                       style={{ borderColor: C.border, color: C.faint }}>
                       <IconX />
                     </button>
                   </>
                 ) : (
                   <button onClick={() => setDeleteConfirm(wine.id)} title={at('wines.deleteWine')}
-                    className="p-1 rounded border"
+                    className="p-1 rounded border min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
                     style={{ borderColor: '#fca5a5', color: '#dc2626' }}>
                     <IconTrash />
                   </button>
                 )}
-                <button
-                  onClick={() => toggleExpand(wine.id)}
-                  className="p-1 rounded transition-transform"
-                  style={{ color: C.faint, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
-                  title={isExpanded ? at('wines.collapse') : at('wines.expand')}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 5.5L7 9.5L11 5.5" />
-                  </svg>
-                </button>
               </div>
+
+              {/* The chevron sits beside the name on a phone and at the far right on desktop. */}
+              <button
+                onClick={e => { e.stopPropagation(); toggleExpand(wine.id) }}
+                className="order-2 md:order-3 p-1 rounded transition-transform flex-shrink-0 min-w-10 min-h-10 md:min-w-0 md:min-h-0 inline-flex items-center justify-center"
+                style={{ color: C.faint, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+                title={isExpanded ? at('wines.collapse') : at('wines.expand')}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 5.5L7 9.5L11 5.5" />
+                </svg>
+              </button>
             </div>
 
             {/* ── Expanded panel ── */}
