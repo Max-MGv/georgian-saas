@@ -26,7 +26,7 @@ tags: [plan, payments, flitt, orders, wine-orders, active]
 |---|---|---|---|
 | 0 | Read-only baseline on production | — | ⏸ not now (Max, 2026-10-29) |
 | 1 | T-321: stop the wrong "booking confirmed, paid in full" email + result-page wording | **R1** alone | ✅ **built + verified on localhost, on `staging` 2026-10-29 — NOT on production** (see §7 Chunk 1 "Result") |
-| 2 | Settlement rules: card money marks Confirmed/Completed orders Paid; cancelled → flagged | R2 | 📋 |
+| 2 | Settlement rules: card money marks Confirmed/Completed orders Paid; cancelled → flagged | R2 | 🚧 **backend built + verified on localhost (commit local, not pushed)**; Q-11 block + Q-2 warning wait for Max's decision (see §7 Chunk 2 "Result") |
 | 2b | "Nothing to pay" state for 0 ₾ bookings (Q-12) | R2 | 📋 |
 | 3 | Link basics: 7-day lifetime, Georgian checkout, "open link" awareness, reconcile window | R2 | 📋 |
 | 4 | Mockup of the third option (all pickers, desktop + phone, EN + KA) → Max decides | — | 📋 |
@@ -209,6 +209,44 @@ in `sendSettlementEmail`).
   genuinely-free case first.
 - **Verify:** script on dev: every stage × (unpaid / paid / cancelled) × booking / wine order → `paidAt`,
   events, `abandonedAt`, ledger sum as expected.
+
+**Result (2026-10-29, evening) — backend done; two items held for Max.** Started after Max's "proceed".
+- **Built (no schema, no migration):**
+  - `lib/payments/settle.ts` — card money marks an order Paid from **any stage except CANCELLED** (was: only `NEW`);
+    `paidAt: null` guard (#65) kept; a settlement on a CANCELLED order is recorded (Payment row settles) but the order
+    is **not** marked Paid, and its `PAID` event payload carries `afterCancellation: true` (no new `OrderEventType`).
+  - `lib/payments/manualPayment.ts` — `recordManualPayment` writes the **remaining balance** (`amount` = full amount due,
+    minus every live payment) instead of nothing once any payment exists (P-3); zero when covered / over-covered /
+    called twice; re-marking after an un-pay writes again. Side effect: a booking with no price no longer gets a 0 ₾ row
+    (P-7 half; the Paid block itself is Q-11, held).
+  - `lib/payments/topUpCheckout.ts` — server refusals before any Flitt call, bookings + wine: cancelled → "This order is
+    cancelled, so it cannot take a payment."; no price / 0 ₾ → "Set the price first."; on an **unpaid** order the link
+    must be the full amount owed (Q-1). The paid-order top-up (editable amount ≤ balance) is unchanged.
+- **Verified:** full-project `tsc` clean (run after the script was written). `scripts/test-settle-stages.ts --write`
+  **120/120** on the dev DB: every stage (NEW / CONFIRMED / COMPLETED-DELIVERED / CANCELLED) × (unpaid / already paid) ×
+  (booking / wine) → settles, stage never moves, Paid only when it should be (never on CANCELLED, `paidAt` untouched when
+  already paid), PAID event flagged only on CANCELLED, ledger = card money; abandoned booking that pays leaves Abandoned;
+  the Mark-paid ledger cases for both kinds; the eight link refusals. Regression: `test-payment-ledger` 16/16,
+  `test-settle-double-payment` 11/11, `test-settle-wine-fee-topup` 9/9, `test-settle-admin-link` 11/11. Dev backups taken by
+  the hook before each write (`Downloads\DB_Backups\2026-10-29_170347_dev_auto-write-apply-flag` and earlier).
+  Tiers 1–5 deliberately NOT run (Max: E2E only at the end; tier 5 in Chunk 7).
+- **Found in the code — contradicts the plan, needs Max (Rule 12 → mockup):**
+  1. **Q-2's "timeline note + warning" has no screen to land on.** `OrderEvent` rows are written but **nothing reads them**
+     (checked: no `orderEvent.findMany` in `app/` or `lib/`; the order page's flow-line is built from stage dates, not
+     events). The flag is recorded; a visible "₾X card money on a cancelled order — refund it in Flitt" needs new UI
+     (derivable without events: a CANCELLED order with live card payments). → decide in the Chunk 4 mockup.
+  2. **Q-11 "pickers show the reason" cannot work today.** All four callers of `changeBookingStatus` /
+     `changeWineOrderStatus` (`OrdersTable.tsx:934`, `OrderDetail.tsx:862`, `WineOrdersClient.tsx:1607`,
+     `AbandonedClient.tsx:169`) **ignore the returned `{ error }` and never undo their optimistic patch** — so a server
+     block on 0 ₾ / no price would show "Paid" until the next refresh. **Held on purpose:** build the server block together
+     with an error display + optimistic revert (4 files, phone pass, EN + KA) after Max decides how it should look. Also
+     fixes the same silent failure for the errors that already exist ("Order not found", "Failed to update status").
+- **Shipping note:** `staging` will carry R1 (T-321) and R2 together. R1 can still ship alone to `master` by cherry-picking
+  `160edbf` + `ca808af` (never a plain merge of `staging`) — only on Max's explicit go.
+- **Resume point:** Chunk 2 backend committed locally on `staging` as `T-318 chunk 2: …`, **not pushed** (keeps staging
+  = R1 while Max tests T-321; it can be pushed any time, nothing in it is visible to users). Next: Max answers the two
+  held items; then Chunk 2b (needs the "Nothing to pay" pill wording → mockup first, Rule 12), Chunk 3 (link lifetime /
+  language / one open link / reconcile window — backend, can follow without UI), Chunk 4 mockup.
 
 ### Chunk 2b — "Nothing to pay" for 0 ₾ bookings (R2, Q-12)
 - One payment state more in `lib/orderFilters.ts`: `paymentStateOf` returns `nothing` when `totalPrice === 0`

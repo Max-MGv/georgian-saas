@@ -21,6 +21,13 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-29 (night) — T-318 Chunk 2 BACKEND built + verified on localhost (commit local, NOT pushed, NOT on production)
+
+- **Max said "proceed, don't forget backups, keep updating the vault"** → Chunk 2 of [[Plan-AdminCardPayments]]. Built: card money marks an order Paid from any stage except CANCELLED (cancelled → recorded, not Paid, `PAID` event flagged `afterCancellation`); "Mark paid" records the remaining balance; server refusals for admin links (cancelled / no price / partial amount on an unpaid order). No schema. Verified: tsc; new `scripts/test-settle-stages.ts` 120/120 on dev; four older settle/ledger scripts green. Dev backups by the hook before each write. Record + result: plan §7 Chunk 2 "Result".
+- **Two plan assumptions did not hold (held for Max, not improvised):** (1) nothing in the app reads `OrderEvent` rows, so Q-2's "timeline note + warning" has no place to appear — needs UI/mockup; (2) all four callers of `changeBookingStatus` / `changeWineOrderStatus` ignore the returned error and never undo their optimistic patch, so Q-11's server block would fail silently — build it with an error display (4 files).
+- **Not pushed:** the commit stays local so staging = R1 while Max tests T-321. R1 ships alone by cherry-picking `160edbf` + `ca808af`, never a merge of `staging`.
+- **Next:** Max decides the two held items → Chunk 2b mockup, Chunk 3 (backend), Chunk 4 mockup. Chunks 5–8 not started.
+
 ## 2026-10-29 (evening) — T-321 built + verified on localhost, pushed to STAGING (Chunk 1 of Plan-AdminCardPayments; NOT on production)
 
 - **What:** a booking paid through a card link an admin made no longer sends "booking confirmed, paid in full" to the guest or "New paid booking" to the winery; the guest's result page says "Payment received — thank you" without "a confirmation has been sent". Guest's own checkout unchanged. **Max narrowed the scope to bookings only** ("consistency and accuracy, focus on booking only right now"): the wine-order fee link keeps its receipt (accurate; decided with the wine Card step, Chunk 6). Details, files and the verification record: [[Plan-AdminCardPayments]] §7 Chunk 1 "Result". FeatureLog #248, KnownBugs #96 (fixed on staging only).

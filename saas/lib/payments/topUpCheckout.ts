@@ -80,6 +80,27 @@ export function isAdminLinkPayment(flittOrderId: string | null | undefined): boo
   return !!flittOrderId && flittOrderId.includes(ADMIN_LINK_MARKER)
 }
 
+/**
+ * Server-side rules for any admin card link (T-318 Chunk 2) — the screens hide the button, but the
+ * server is what refuses. A cancelled order takes no payment (money arriving later is recorded but
+ * not marked Paid — settle.ts), and an order without a price has nothing to charge ("Set the price
+ * first", the same words Q-11 uses for Mark paid).
+ */
+function linkRefusal(o: { stage: string; total: number | null }): string | null {
+  if (o.stage === 'CANCELLED') return 'This order is cancelled, so it cannot take a payment.'
+  if (o.total === null || o.total <= 0) return 'Set the price first.'
+  return null
+}
+
+/**
+ * On an UNPAID order a card link works like Bank / Cash: it collects the full amount still owed
+ * (Q-1, Max 2026-10-29), not a part. The editable amount belongs to the top-up on an already-paid
+ * order (extras added later), which is the only link the screens offer today.
+ */
+function unpaidLinkMustBeFull(balance: number): string {
+  return `A payment link for an unpaid order collects the full amount owed (${formatTetri(balance as Tetri, { decimals: true })}).`
+}
+
 export type StartTopUpCheckoutInput = {
   orderId: string
   tenantId: string
@@ -101,9 +122,11 @@ export async function startTopUpCheckout(
 
   const order = await db.order.findFirst({
     where: { id: input.orderId, tenantId: input.tenantId },
-    select: { totalPrice: true },
+    select: { totalPrice: true, stage: true, paidAt: true },
   })
   if (!order) return { error: 'Order not found.' }
+  const refused = linkRefusal({ stage: order.stage, total: order.totalPrice })
+  if (refused) return { error: refused }
 
   const settled = await db.payment.aggregate({
     where: { orderId: input.orderId, settledAt: { not: null }, reversedAt: null },
@@ -111,6 +134,7 @@ export async function startTopUpCheckout(
   })
   const currentBalance = balanceDue(order.totalPrice, settled._sum.amount ?? 0)
 
+  if (order.paidAt == null && input.amount !== currentBalance) return { error: unpaidLinkMustBeFull(currentBalance) }
   if (input.amount > currentBalance) {
     return {
       error:
@@ -133,8 +157,17 @@ export async function startWineTopUpCheckout(
   if (input.amount <= 0) {
     return { error: 'Enter an amount greater than zero.' }
   }
+  const wine = await db.wineOrder.findFirst({
+    where: { id: input.wineOrderId, tenantId: input.tenantId },
+    select: { stage: true, paidAt: true, totalAmount: true },
+  })
+  if (!wine) return { error: 'Wine order not found.' }
+  const refused = linkRefusal({ stage: wine.stage, total: wine.totalAmount })
+  if (refused) return { error: refused }
+
   const owed = await wineOrderBalance(db, { wineOrderId: input.wineOrderId, tenantId: input.tenantId })
   if ('error' in owed) return owed
+  if (wine.paidAt == null && input.amount !== owed.balance) return { error: unpaidLinkMustBeFull(owed.balance) }
   if (input.amount > owed.balance) {
     return {
       error: `That's more than the outstanding balance of ${formatTetri(owed.balance, { decimals: true })}.`,

@@ -29,29 +29,31 @@ const MANUAL_PROVIDER = 'manual'
 type OrderRef = { orderId?: string | null; wineOrderId?: string | null }
 
 /**
- * Is this order already covered by a payment that counts?
- *
- * Settled and not reversed. Used to stop a second row appearing when an admin
- * toggles paid off and on again for an order the gateway already settled — the
- * card payment is still real, and a manual row beside it would double-count.
+ * What this order has already been paid: every settled, non-reversed payment (card or manual).
+ * The same sum `balanceDue` callers use, so "mark as paid" and the balance can never disagree.
  */
-async function hasLivePayment(tx: TxClient, ref: OrderRef): Promise<boolean> {
-  const found = await tx.payment.findFirst({
+async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
+  const sum = await tx.payment.aggregate({
     where: {
       ...(ref.orderId ? { orderId: ref.orderId } : { wineOrderId: ref.wineOrderId ?? undefined }),
       settledAt: { not: null },
       reversedAt: null,
     },
-    select: { id: true },
+    _sum: { amount: true },
   })
-  return found != null
+  return sum._sum.amount ?? 0
 }
 
 /**
- * Record a payment an admin marked by hand.
+ * Record a payment an admin marked by hand: whatever is still unpaid of `amount`.
  *
- * No-op when the order already has a live payment, so this is safe to call on
- * every "mark as paid" without checking first.
+ * `amount` is the FULL amount due on the order (bookings: the total; wine: wines + fee), not what
+ * to add. The row written is the remaining balance — `amount` minus every live payment — and
+ * nothing is written once that is zero or less. So it stays safe to call on every "mark as paid"
+ * (toggling paid off and on again after a card payment never double-counts: the card payment is
+ * still real), and a part-paid order is completed with exactly the missing amount. It used to do
+ * nothing as soon as ANY payment existed, which left a part-paid order "Paid" with the ledger
+ * short (T-318 P-3, 2026-10-29).
  *
  * `method` defaults to MANUAL — the admin was not asked how the money arrived
  * — but the "Paid" picker now lets them say BANK_TRANSFER or CASH, which is
@@ -65,7 +67,8 @@ export async function recordManualPayment(
   // is what an unbranded one costs when someone wires a lari field to it.
   input: OrderRef & { tenantId: string | null; amount: Tetri; at: Date; method?: 'BANK_TRANSFER' | 'CASH' }
 ): Promise<void> {
-  if (await hasLivePayment(tx, input)) return
+  const owed = balanceDue(input.amount, await livePaidSum(tx, input))
+  if (owed <= 0) return
 
   await tx.payment.create({
     data: {
@@ -77,7 +80,7 @@ export async function recordManualPayment(
       // The gateway's verbatim string has no meaning here; this says plainly
       // where the row came from.
       status: 'recorded',
-      amount: input.amount,
+      amount: owed,
       settledAt: input.at,
     },
   })

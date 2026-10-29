@@ -223,46 +223,52 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // loudly rather than leave a paid order filed under abandoned.
     const paidColumns = { paidAt: settledAt, abandonedAt: null }
 
+    // Read before anything is written: money that arrives on a CANCELLED order is recorded but must
+    // not mark it Paid (below) and must leave a trace a human can find — "refund it in Flitt".
+    // The flag rides in the event payload; a new OrderEventType would need a migration.
+    const stageNow = payment.orderId
+      ? (await tx.order.findUnique({ where: { id: payment.orderId }, select: { stage: true } }))?.stage
+      : payment.wineOrderId
+        ? (await tx.wineOrder.findUnique({ where: { id: payment.wineOrderId }, select: { stage: true } }))?.stage
+        : undefined
+    const afterCancellation = stageNow === 'CANCELLED'
+
     await recordOrderEvent(tx, {
       tenantId,
       orderId: payment.orderId,
       wineOrderId: payment.wineOrderId,
       type: 'PAID',
       actorType: 'GATEWAY',
-      payload: { provider: payment.provider, providerPaymentId, amount: payment.amount },
+      payload: {
+        provider: payment.provider,
+        providerPaymentId,
+        amount: payment.amount,
+        ...(afterCancellation ? { afterCancellation: true } : {}),
+      },
     })
 
-    // Guarded on stage rather than blindly set: an order a human already moved
-    // on — completed it, or cancelled it — must not have its fulfilment dragged
-    // backwards by a late callback. `stage: 'NEW'` says exactly that, which is
-    // what the old `status IN (NEW, PENDING_PAYMENT)` guard was reaching for
-    // through a column that mixed the two ideas together.
+    // Paid from ANY stage except CANCELLED (T-318 Q-3, 2026-10-29). Money often arrives long after
+    // the visit or delivery — a Completed booking, a Delivered wine order — exactly as a bank
+    // transfer or cash would, so the old `stage: 'NEW'` guard left those orders showing Unpaid
+    // although the card had been charged. Setting `paidAt` never touches `stage`, so nothing is
+    // dragged backwards. A CANCELLED order is the one exception (Q-2): a late payment on an old link
+    // is recorded (the Payment row settles above, the event above carries `afterCancellation`) but
+    // the order is not marked Paid — the money has to be refunded in Flitt, not honoured.
     //
-    // Also guarded on `paidAt: null` (KnownBugs.md #65, found 2026-09-25): the
-    // `stage: 'NEW'` guard alone answers "has a human moved this order along",
-    // not "has this order already been paid once" — and those are different
-    // facts. An order can collect a second, real, independent payment while
-    // still sitting in stage NEW (ordinary — not every booking gets its stage
-    // dropdown advanced): a manual deposit followed by a card top-up for the
-    // balance, or two separate Flitt payments, both shipped flows (see
-    // Plan-PostPaymentExtras.md chunks 3/4). Without this second condition,
-    // that second settlement's `updateMany` still matched on `stage: 'NEW'`
-    // alone and silently overwrote `paidAt` with the second payment's
-    // timestamp — so the order's "first paid" fact quietly moved forward on
-    // every subsequent real settlement, with nothing anywhere flagging the
-    // change. `paidAt: null` closes that: once the first settlement has set
-    // it, no later settlement's `updateMany` can match this row again, so
-    // `paidAt` is written exactly once. The `Payment` row for that second
-    // payment still settles normally either way (see the idempotency gate
-    // above) — only the order's own `paidAt` is protected here.
+    // Also guarded on `paidAt: null` (KnownBugs.md #65, found 2026-09-25): without it, a second real,
+    // independent payment on an already-paid order (a manual deposit then a card top-up, or two
+    // Flitt payments — both shipped flows, Plan-PostPaymentExtras chunks 3/4) matched the same
+    // `updateMany` again and silently moved `paidAt` forward on every settlement. With it, `paidAt`
+    // is written exactly once; the second `Payment` row still settles normally (idempotency gate
+    // above) — only the order's own first-paid time is protected.
     if (payment.orderId) {
       await tx.order.updateMany({
-        where: { id: payment.orderId, stage: 'NEW', paidAt: null },
+        where: { id: payment.orderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,
       })
     } else if (payment.wineOrderId) {
       await tx.wineOrder.updateMany({
-        where: { id: payment.wineOrderId, stage: 'NEW', paidAt: null },
+        where: { id: payment.wineOrderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,
       })
     }
