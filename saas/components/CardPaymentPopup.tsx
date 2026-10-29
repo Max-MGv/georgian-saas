@@ -29,6 +29,8 @@ export type CardLink = {
   /** An already-open link for the same amount was handed back instead of a new one. */
   reused: boolean
   canEmail: boolean
+  /** Wine order whose delivery fee is not set yet: the link charges the wines only. */
+  feePending?: boolean
 }
 
 type Phase = 'loading' | 'waiting' | 'paid' | 'expired' | 'error'
@@ -125,9 +127,12 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
       }
     }
     const timer = setInterval(tick, POLL_MS)
+    // Back in the tab after the guest paid: don't wait for the next tick.
+    const onVisible = () => { if (!document.hidden) void tick() }
+    document.addEventListener('visibilitychange', onVisible)
     const left = new Date(link.expiresAt).getTime() - Date.now()
     const expiry = setTimeout(() => { if (!stopped) setPhase('expired') }, Math.max(0, Math.min(left, 2_000_000_000)))
-    return () => { stopped = true; clearInterval(timer); clearTimeout(expiry) }
+    return () => { stopped = true; clearInterval(timer); clearTimeout(expiry); document.removeEventListener('visibilitychange', onVisible) }
   }, [phase, link])
 
   async function copy() {
@@ -203,8 +208,8 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
                   <Dialog.Description className="text-xs mb-3" style={{ color: 'var(--site-secondary)' }}>
                     {phase === 'waiting' ? at('cardPay.hint') : ''}
                   </Dialog.Description>
-                  {phase === 'waiting' && note && (
-                    <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05', textAlign: 'left' }}>{note}</p>
+                  {phase === 'waiting' && (note || link.feePending) && (
+                    <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05', textAlign: 'left' }}>{note ?? at('cardPay.feeNotSet')}</p>
                   )}
                   {phase === 'waiting' && link.reused && (
                     <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#e4eefb', border: '1px solid #a9c3ea', color: '#1e3a6b', textAlign: 'left' }}>

@@ -25,6 +25,8 @@ import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
 import { revertPatch } from '@/lib/revertPatch'
+import PaymentMethodDialog from '@/components/PaymentMethodDialog'
+import CardPaymentFor from '@/components/CardPaymentFor'
 import type { StatusChangeResult } from '@/lib/statusRefusal'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
@@ -700,13 +702,10 @@ function StepButton({ label, index, isDone, isActive, isClickable, panelHovered,
  * restaurant that will settle its invoice in a month. One line either way —
  * not a fulfilment stepper with a payment badge beside it.
  */
-function FlowLine({ order, onRequestChange, pendingLabel, pendingIsPaid, onConfirm, onCancel, locale }: {
+function FlowLine({ order, onRequestChange, pendingLabel, onConfirm, onCancel, locale }: {
   order: WineOrder
   onRequestChange: (change: WineOrderStatusChange, label: string) => void
   pendingLabel?: string
-  /** True when the pending change is 'paid' — swaps the plain ✓ for the
-   * bank-transfer/cash picker below (see confirmChange). */
-  pendingIsPaid?: boolean
   onConfirm: (method?: 'BANK_TRANSFER' | 'CASH') => void
   onCancel: () => void
   locale: string
@@ -788,22 +787,11 @@ function FlowLine({ order, onRequestChange, pendingLabel, pendingIsPaid, onConfi
         </div>
       )}
       {pendingLabel && (
-        pendingIsPaid ? (
-          <div className="mt-2 pt-2 border-t flex flex-col gap-1 text-xs" style={{ borderColor: C.border }}>
-            <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
-              <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
-              <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
-            </div>
-          </div>
-        ) : (
           <div className="mt-2 pt-2 border-t flex items-center gap-1.5 text-xs" style={{ borderColor: C.border }}>
             <span style={{ color: C.muted, flex: 1 }}>→ {pendingLabel}?</span>
             <button onClick={() => onConfirm()} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#16a34a' }}>✓</button>
             <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
           </div>
-        )
       )}
     </div>
   )
@@ -1080,19 +1068,7 @@ function TableView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         ))}
                       </div>
                     )}
-                    {isPending && pendingChange.change.kind === 'paid' ? (
-                      <div className="flex flex-col gap-1 mt-1.5 text-xs">
-                        <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white"
-                            style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
-                          <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white"
-                            style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
-                          <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white"
-                            style={{ backgroundColor: '#dc2626' }}>✗</button>
-                        </div>
-                      </div>
-                    ) : isPending && (
+                    {isPending && (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                         <span style={{ color: C.muted }}>
                           → {pendingChange.label}?
@@ -1259,16 +1235,7 @@ function BoardView({ orders, pendingChange, onRequestChange, onConfirm, onCancel
                         >
                           {labelFor(locale, columnOf(order))} ▾
                         </button>
-                        {isPending && pendingChange.change.kind === 'paid' ? (
-                          <div className="flex flex-col gap-1 mt-1.5 text-xs">
-                            <span style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</span>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <button onClick={() => onConfirm('BANK_TRANSFER')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.bankTransfer')}</button>
-                              <button onClick={() => onConfirm('CASH')} className="px-2 py-0.5 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>{at('paymentMethod.cash')}</button>
-                              <button onClick={onCancel} className="px-2 py-0.5 rounded font-bold text-white" style={{ backgroundColor: '#dc2626' }}>✗</button>
-                            </div>
-                          </div>
-                        ) : isPending && (
+                        {isPending && (
                           <div className="flex items-center gap-1.5 mt-1.5 text-xs">
                             <span style={{ color: C.muted }}>
                               → {pendingChange.label}?
@@ -1501,6 +1468,10 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState<WineOrder[]>(initial)
   const statusNotice = useStatusNotice()
+  // T-318 Chunk 6: the order whose "How was this paid?" dialog / Card popup is open.
+  const [payFor, setPayFor] = useState<string | null>(null)
+  const [cardFor, setCardFor] = useState<string | null>(null)
+  const markPaidLocally = (id: string) => setOrders(p => p.map(o => (o.id === id ? { ...o, paidAt: o.paidAt ?? new Date() } : o)))
   const [mode, setMode] = useState<Mode>('cards')
   const [filters, setFilters] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -1631,6 +1602,13 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   }
 
   function requestChange(orderId: string, change: WineOrderStatusChange, label: string) {
+    // "Paid" asks HOW first — Bank transfer / Cash / Card — in one shared dialog (T-318 Chunk 6); every other
+    // change keeps the small ✓ / ✗ confirmation.
+    if (change.kind === 'paid') {
+      setPendingChange(null)
+      setPayFor(orderId)
+      return
+    }
     if (timerRef.current) clearTimeout(timerRef.current)
     setPendingChange({ orderId, change, label })
     timerRef.current = setTimeout(() => setPendingChange(null), 5000)
@@ -1671,6 +1649,26 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const modeToggle = (
     <>
     <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
+    {payFor && (
+      <PaymentMethodDialog
+        kind="wine"
+        id={payFor}
+        locale={locale}
+        onRecord={method => { const id = payFor; setPayFor(null); handleUpdate(id, { kind: 'paid', value: true, method }) }}
+        onCard={() => { setCardFor(payFor); setPayFor(null) }}
+        onClose={() => setPayFor(null)}
+        onAlreadyPaid={() => { markPaidLocally(payFor); setPayFor(null) }}
+      />
+    )}
+    {cardFor && (
+      <CardPaymentFor
+        kind="wine"
+        id={cardFor}
+        locale={locale}
+        onPaid={() => markPaidLocally(cardFor)}
+        onClose={() => setCardFor(null)}
+      />
+    )}
     <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start max-w-full">
       {/* min-w-0 + overflow-x-auto: Georgian labels are long, and at 320px the four tabs
           plus the "?" are wider than the screen - scroll the tabs rather than the page. */}
@@ -1830,7 +1828,6 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                     order={order}
                     onRequestChange={(change: WineOrderStatusChange, label: string) => requestChange(order.id, change, label)}
                     pendingLabel={isPending ? pendingChange.label : undefined}
-                    pendingIsPaid={isPending ? pendingChange.change.kind === 'paid' : undefined}
                     onConfirm={confirmChange}
                     onCancel={cancelChange}
                     locale={locale}

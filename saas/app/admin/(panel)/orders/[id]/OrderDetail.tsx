@@ -10,7 +10,7 @@ import DateInput from '@/components/DateInput'
 import { useContactSelection } from '@/lib/useContactSelection'
 import type { ContactChoice, OrderRole } from '@/lib/contactResolution'
 import { countryName } from '@/lib/countries'
-import { updateOrderBooking, updateOrderContacts, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail, startOrderCardPayment, getOrderCardState } from '@/app/actions/orders'
+import { updateOrderBooking, updateOrderContacts, updateOrderEnhanced, changeBookingStatus, sendOrderInvoice, assignOrderCompany, recordTopUpPayment, startOrderTopUpCheckout, sendOrderTopUpCheckoutEmail } from '@/app/actions/orders'
 import { notOffered, priceCounts, PRODUCTS, ratesFromProductSnapshot, type BookingVisitType, type Counts, type Product } from '@/lib/pricingUtils'
 import { lineTotals } from '@/lib/orderLines'
 import { priceWineOrder, wineLineTotalFor } from '@/lib/winePricing'
@@ -26,7 +26,9 @@ import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
 import { revertPatch } from '@/lib/revertPatch'
-import { formatLinkDay, formatLinkMoment } from '@/lib/formatLinkMoment'
+import { formatLinkDay } from '@/lib/formatLinkMoment'
+import PaymentMethodChoices from '@/components/PaymentMethodChoices'
+import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
 import type { StatusChangeResult } from '@/lib/statusRefusal'
 import {
   bookingStagePatch,
@@ -40,7 +42,6 @@ import InvoicePrint from '../InvoicePrint'
 
 // The QR library only loads once a card-payment link actually exists on this page.
 const QrCodeDialog = dynamic(() => import('@/components/QrCodeDialog'), { ssr: false })
-const CardPaymentPopup = dynamic(() => import('@/components/CardPaymentPopup'), { ssr: false })
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -787,13 +788,10 @@ export default function OrderDetail({
   // away, so the ledger records Bank transfer / Cash rather than a guessed
   // MANUAL. CARD never appears here — only a real Flitt settlement sets it.
   const [pickingPaymentMethod, setPickingPaymentMethod] = useState(false)
-  // T-318 Chunk 5 — the Card step. `openLink`: a card link for this booking that can still be paid (drives the
-  // "link open" mark and the Bank/Cash warning); `linkWarn`: Bank/Cash was chosen while one is open.
+  // T-318 Chunks 5–6 — the Card step (shared components: PaymentMethodChoices, CardPaymentFor). `openLink`: a card
+  // link for this booking that can still be paid — drives the "link open" mark.
   const [cardPopup, setCardPopup] = useState(false)
   const [openLink, setOpenLink] = useState<{ amount: number; expiresAt: string } | null>(null)
-  const [linkWarn, setLinkWarn] = useState<{ method: 'BANK_TRANSFER' | 'CASH'; link: { amount: number; expiresAt: string } } | null>(null)
-  const [checkingMethod, setCheckingMethod] = useState(false)
-  const cardStartRef = useRef<ReturnType<typeof startOrderCardPayment> | null>(null)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
   const [printReady, setPrintReady] = useState(false)
@@ -902,39 +900,7 @@ export default function OrderDetail({
     handleStatusChange(step.change)
   }
 
-  // Bank / Cash record money that has ALREADY arrived. If a card link for this booking is still open the guest
-  // could pay it too and be charged twice (a link cannot be cancelled), so ask the server first and warn.
-  async function handlePaymentMethodChosen(method: 'BANK_TRANSFER' | 'CASH') {
-    setCheckingMethod(true)
-    let state: Awaited<ReturnType<typeof getOrderCardState>> | null = null
-    try { state = await getOrderCardState(order.id) } catch { state = null }
-    setCheckingMethod(false)
-    if (state && !('error' in state)) {
-      setOpenLink(state.openLink)
-      if (state.paid) {
-        // Paid in the meantime (the guest used the link): nothing left to record.
-        setPickingPaymentMethod(false)
-        setStatusMenuOpen(false)
-        setFlow(f => ({ ...f, paidAt: f.paidAt ?? new Date() }))
-        router.refresh()
-        return
-      }
-      if (state.openLink) {
-        setLinkWarn({ method, link: state.openLink })
-        return
-      }
-    }
-    recordPaymentNow(method)
-  }
-
-  function recordPaymentNow(method: 'BANK_TRANSFER' | 'CASH') {
-    setLinkWarn(null)
-    setPickingPaymentMethod(false)
-    handleStatusChange({ kind: 'paid', value: true, method })
-  }
-
   function openCardPopup() {
-    setLinkWarn(null)
     setPickingPaymentMethod(false)
     setStatusMenuOpen(false)
     setCardPopup(true)
@@ -944,7 +910,7 @@ export default function OrderDetail({
   useEffect(() => {
     if (order.paidAt != null) return
     let cancelled = false
-    getOrderCardState(order.id).then(s => { if (!cancelled && !('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
+    getCardState('booking', order.id).then(s => { if (!cancelled && !('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
     return () => { cancelled = true }
   }, [order.id, order.paidAt])
 
@@ -1371,50 +1337,21 @@ export default function OrderDetail({
                 onClick={e => e.stopPropagation()}
               >
                 {pickingPaymentMethod ? (
-                  <div className="px-3 py-2" style={{ minWidth: 220, maxWidth: 'min(86vw, 300px)' }}>
-                    <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-                    {linkWarn ? (
-                      <div className="flex flex-col gap-1.5">
-                        <p role="alert" className="text-xs rounded-md px-2 py-1.5" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05' }}>
-                          {at('paymentMethod.linkOpenWarn', { amount: formatTetri(asTetri(linkWarn.link.amount)), date: formatLinkMoment(linkWarn.link.expiresAt, locale) })}
-                        </p>
-                        <button onClick={() => recordPaymentNow(linkWarn.method)}
-                          className="text-left text-xs px-2 rounded font-medium text-white" style={{ backgroundColor: '#16a34a', minHeight: 40 }}>
-                          {at(linkWarn.method === 'CASH' ? 'paymentMethod.anywayCash' : 'paymentMethod.anywayBank')}
-                        </button>
-                        <button onClick={openCardPopup}
-                          className="text-left text-xs px-2 rounded font-semibold" style={{ border: `1.5px solid ${C.wine}`, color: C.wine, minHeight: 40 }}>
-                          {at('paymentMethod.card')}
-                          <span className="block font-normal" style={{ color: C.muted, fontSize: 11 }}>{at('paymentMethod.cardOpenHint')}</span>
-                        </button>
-                        <button onClick={() => setLinkWarn(null)} className="text-left text-xs px-2" style={{ color: C.muted, minHeight: 40 }}>
-                          {at('paymentMethod.back')}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        <button onClick={() => handlePaymentMethodChosen('BANK_TRANSFER')} disabled={checkingMethod}
-                          className="text-left text-xs px-2 py-1 rounded font-medium text-white disabled:opacity-60" style={{ backgroundColor: '#16a34a', minHeight: 36 }}>
-                          {at('paymentMethod.bankTransfer')}
-                        </button>
-                        <button onClick={() => handlePaymentMethodChosen('CASH')} disabled={checkingMethod}
-                          className="text-left text-xs px-2 py-1 rounded font-medium text-white disabled:opacity-60" style={{ backgroundColor: '#16a34a', minHeight: 36 }}>
-                          {at('paymentMethod.cash')}
-                        </button>
-                        {/* Card is different from the other two: it ASKS the guest to pay (the order turns Paid only when
-                            Flitt confirms), so it is outlined and says what happens (mockup option B). */}
-                        <button onClick={openCardPopup} disabled={checkingMethod}
-                          className="text-left text-xs px-2 py-1 rounded font-semibold disabled:opacity-60" style={{ border: `1.5px solid ${C.wine}`, color: C.wine, minHeight: 40 }}>
-                          {at('paymentMethod.card')}
-                          <span className="block font-normal" style={{ color: C.muted, fontSize: 11 }}>{at('paymentMethod.cardHint')}</span>
-                        </button>
-                        <button onClick={() => setPickingPaymentMethod(false)}
-                          className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
-                          {at('paymentMethod.cancel')}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <PaymentMethodChoices
+                    locale={locale}
+                    getState={() => getCardState('booking', order.id)}
+                    onRecord={method => { setPickingPaymentMethod(false); handleStatusChange({ kind: 'paid', value: true, method }) }}
+                    onCard={openCardPopup}
+                    onCancel={() => setPickingPaymentMethod(false)}
+                    onAlreadyPaid={() => {
+                      // Paid in the meantime (the guest used the link): nothing left to record.
+                      setPickingPaymentMethod(false)
+                      setStatusMenuOpen(false)
+                      setFlow(f => ({ ...f, paidAt: f.paidAt ?? new Date() }))
+                      router.refresh()
+                    }}
+                    onOpenLink={setOpenLink}
+                  />
                 ) : menuSteps.map(step => (
                   <button
                     key={step.code}
@@ -1470,21 +1407,11 @@ export default function OrderDetail({
 
       <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
       {cardPopup && (
-        <CardPaymentPopup
+        <CardPaymentFor
+          kind="booking"
+          id={order.id}
           locale={locale}
-          subject="booking"
-          start={() => {
-            // One request at a time: a second call while the first is in flight (React's development double-mount,
-            // a double click) shares its answer instead of asking again and getting "already open" back.
-            if (!cardStartRef.current) {
-              cardStartRef.current = startOrderCardPayment(order.id)
-                .then(r => { if ('success' in r) setOpenLink({ amount: r.amount, expiresAt: r.expiresAt }); return r })
-                .finally(() => { setTimeout(() => { cardStartRef.current = null }, 1500) })
-            }
-            return cardStartRef.current
-          }}
-          isPaid={async () => { const s = await getOrderCardState(order.id); return !('error' in s) && s.paid }}
-          sendEmail={paymentId => sendOrderTopUpCheckoutEmail(order.id, paymentId, locale === 'ka' ? 'ka' : 'en')}
+          onLink={setOpenLink}
           onPaid={() => {
             setFlow(f => ({ ...f, paidAt: f.paidAt ?? new Date() }))
             setOpenLink(null)

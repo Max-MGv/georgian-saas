@@ -8,6 +8,8 @@ import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from 
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { revertPatch } from '@/lib/revertPatch'
+import PaymentMethodChoices from '@/components/PaymentMethodChoices'
+import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
 import type { StatusChangeResult } from '@/lib/statusRefusal'
 import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
@@ -769,6 +771,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // asserted rather than a guessed MANUAL. CARD is never offered here — it's
   // only ever set by a real Flitt settlement (lib/payments/settle.ts).
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
+  // T-318 Chunk 6: the booking whose Card popup is open.
+  const [cardOrderId, setCardOrderId] = useState<string | null>(null)
 
   // Hover preview
   const [hoverOrder, setHoverOrder] = useState<Order | null>(null)
@@ -993,6 +997,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     handleStatusChange(orderId, { kind: 'paid', value: true, method })
   }
 
+  /** The Card popup confirmed a payment: show the booking as Paid (the server marked it when Flitt confirmed). */
+  function markPaidLocally(orderId: string) {
+    // The card link was for the full amount still owed, so the money received now equals the total — without this
+    // the "balance due" mark would show until the next refresh.
+    setOrders(prev => prev.map(o => (o.id === orderId
+      ? { ...o, paidAt: o.paidAt ?? new Date(), paymentsSettledTotal: o.totalPrice ?? o.paymentsSettledTotal }
+      : o)))
+  }
+
   function openEdit(order: Order) {
     setEditingOrder(order)
     setEditDate(toInputDate(order.date))
@@ -1052,6 +1065,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   return (
     <>
       <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="sticky top-2 z-30 mt-4" />
+      {cardOrderId && (
+        <CardPaymentFor
+          kind="booking"
+          id={cardOrderId}
+          locale={locale}
+          onPaid={() => markPaidLocally(cardOrderId)}
+          onClose={() => setCardOrderId(null)}
+        />
+      )}
       {/* ── Mobile card list (hidden on md+) ──────────────────── */}
       <div className="flex flex-col gap-3 mt-4 md:hidden">
         {orders.length === 0 && (
@@ -1400,23 +1422,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
             onClick={e => e.stopPropagation()}
           >
             {choosingPayment ? (
-              <div className="px-3 py-2">
-                <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-                <div className="flex flex-col gap-1">
-                  <button onClick={() => handlePaymentMethodChosen(order.id, 'BANK_TRANSFER')}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                    {at('paymentMethod.bankTransfer')}
-                  </button>
-                  <button onClick={() => handlePaymentMethodChosen(order.id, 'CASH')}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                    {at('paymentMethod.cash')}
-                  </button>
-                  <button onClick={() => setPayingOrderId(null)}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-0.5" style={{ color: C.muted }}>
-                    {at('paymentMethod.cancel')}
-                  </button>
-                </div>
-              </div>
+              <PaymentMethodChoices
+                locale={locale}
+                getState={() => getCardState('booking', order.id)}
+                onRecord={method => handlePaymentMethodChosen(order.id, method)}
+                onCard={() => { setPayingOrderId(null); setStatusMenuId(null); setStatusMenuRect(null); setCardOrderId(order.id) }}
+                onCancel={() => setPayingOrderId(null)}
+                onAlreadyPaid={() => { setPayingOrderId(null); setStatusMenuId(null); setStatusMenuRect(null); markPaidLocally(order.id) }}
+              />
             ) : steps.map(step => (
               <button
                 key={step.code}

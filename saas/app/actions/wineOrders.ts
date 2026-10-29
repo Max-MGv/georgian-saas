@@ -3,11 +3,12 @@
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
 import { isIsoDate } from '@/lib/isoDate'
-import { asTetri } from '@/lib/money'
-import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment, liveMoneyCovers } from '@/lib/payments/manualPayment'
+import { asTetri, balanceDue } from '@/lib/money'
+import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { priceWineOrder } from '@/lib/winePricing'
-import { startWineTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { startWineTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
+import { findOpenAdminLink } from '@/lib/payments/openLink'
 import type { Tetri } from '@/lib/money'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
@@ -437,6 +438,72 @@ export async function startWineOrderFeeCheckout(
   })
 }
 
+
+/**
+ * The "Card" step of "How was this paid?" for a wine order (T-318 Chunk 6): a card link for the full amount
+ * still owed — wines + delivery fee, the same figure Bank / Cash record (lib/wineOrderMoney.ts). A delivery
+ * fee still "to be set" counts as 0 (Q-9): the link charges the wines only, and the popup says so
+ * (`feePending`); when the fee is set later the existing "owes" flow collects it. Pickup orders included.
+ * Reuses an open link for the same amount. No e-mail option on wine orders for now (T-322).
+ */
+export async function startWineOrderCardPayment(id: string): Promise<
+  | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: false; feePending: boolean }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.wineOrder.findFirst({
+      where: { id, tenantId },
+      select: { businessName: true, deliveryZoneName: true, totalAmount: true, deliveryFee: true, deliveryFeePending: true, paidAt: true, stage: true },
+    }),
+    paid: await livePaidSum(tx, { wineOrderId: id }),
+  }))
+  const order = found.order
+  if (!order) return { error: 'Wine order not found.' }
+  if (order.paidAt != null) return { error: 'This wine order is already paid.' }
+  const due = wineOrderAmountDue(order)
+  const refused = linkRefusal({ stage: order.stage, total: due })
+  if (refused) return { error: refused }
+  const amount = balanceDue(due, found.paid)
+  if (amount <= 0) return { error: 'There is nothing left to collect on this wine order.' }
+
+  const result = await startWineTopUpCheckout({
+    wineOrderId: id,
+    tenantId,
+    amount,
+    orderDesc: `Wine order${order.deliveryZoneName ? ` (delivery ${order.deliveryZoneName})` : ''}, ${order.businessName}`,
+  })
+  if ('error' in result) return result
+  return {
+    success: true,
+    checkoutUrl: result.checkoutUrl,
+    paymentId: result.paymentId,
+    amount,
+    expiresAt: result.expiresAt,
+    reused: result.reused === true,
+    canEmail: false,
+    feePending: order.deliveryFeePending === true,
+  }
+}
+
+/** What the Card popup polls, and what the picker asks before recording Bank / Cash — see getOrderCardState. */
+export async function getWineOrderCardState(id: string): Promise<
+  | { paid: boolean; openLink: { amount: number; expiresAt: string } | null }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } }),
+    open: await findOpenAdminLink(tx, { wineOrderId: id }),
+  }))
+  if (!found.order) return { error: 'Wine order not found.' }
+  return {
+    paid: found.order.paidAt != null,
+    openLink: found.open ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString() } : null,
+  }
+}
 
 /**
  * Change (or clear) a wine order's preferred delivery / pickup date (T-14, Chunk 7) — the winery
