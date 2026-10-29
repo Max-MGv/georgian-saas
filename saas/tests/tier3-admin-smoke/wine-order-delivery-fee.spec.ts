@@ -120,7 +120,8 @@ test('"Paid" on an unpaid order records wines + delivery fee', async ({ page }) 
   const c = card(page, UNPAID_NAME)
   await expect(c.getByText('45₾').first()).toBeVisible({ timeout: 20_000 })
   await c.getByRole('button', { name: /Paid/ }).first().click()
-  await c.getByRole('button', { name: 'Bank transfer' }).click()
+  // T-318: 'How was this paid?' is one shared dialog now (Bank transfer / Cash / Card), no longer an inline strip on the card.
+  await page.getByRole('dialog').getByRole('button', { name: 'Bank transfer' }).click()
   await expect.poll(async () => (await db.payment.findFirst({ where: { wineOrderId: unpaidId } }))?.amount ?? null, { timeout: 20_000 }).toBe(4500)
 })
 
