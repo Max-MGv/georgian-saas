@@ -21,6 +21,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-29 (late night) — T-318 Chunk 3 BACKEND built + verified incl. the real Flitt test merchant (commit local, NOT pushed, NOT on production)
+
+- **Max: "proceed, but record this on the ticket"** (approving my recommendations on Q-11 / Q-2 / order of work) → the three decisions + progress + commit links are on **T-318** (`tix decide`, `tix solution`, `tix link`) for his later review. Then Chunk 3 of [[Plan-AdminCardPayments]]: admin links ask Flitt for **7 days**, tagged `-topup-7d-` so the lifetime is read back without a migration (old links = 10 h); Flitt checkout in the admin's language; **one open link per order** (same amount → same link); reconcile job follows admin links 9 days; wine "link waiting" ignores expired links. New leaf module `lib/payments/openLink.ts`.
+- **Proof against Flitt:** `scripts/test-link-basics.ts --write --flitt` 19/19; checkout page opens in Georgian; and a 60-s link vs a default control shows Flitt really honours `lifetime` ("Token not found" after 80 s vs still alive) — Flitt does not validate the value, so "accepted" alone proved nothing. Details + behaviour changes: plan §7 Chunk 3 "Result".
+- **State:** `staging` branch has Chunks 1 (pushed) + 2 + 3 (local commits, unpushed). **Next: Chunk 4 mockup for Max** (Card option, popup states, Q-2 warning, Q-11 notice, "Nothing to pay" pill, open-link warning, desktop + 375 px, EN + KA). No UI before he decides.
+
 ## 2026-10-29 (night) — T-318 Chunk 2 BACKEND built + verified on localhost (commit local, NOT pushed, NOT on production)
 
 - **Max said "proceed, don't forget backups, keep updating the vault"** → Chunk 2 of [[Plan-AdminCardPayments]]. Built: card money marks an order Paid from any stage except CANCELLED (cancelled → recorded, not Paid, `PAID` event flagged `afterCancellation`); "Mark paid" records the remaining balance; server refusals for admin links (cancelled / no price / partial amount on an unpaid order). No schema. Verified: tsc; new `scripts/test-settle-stages.ts` 120/120 on dev; four older settle/ledger scripts green. Dev backups by the hook before each write. Record + result: plan §7 Chunk 2 "Result".

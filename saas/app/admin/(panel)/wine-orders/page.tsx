@@ -4,6 +4,7 @@ import { requireWineOrdersModule } from '@/lib/requireModule'
 import { getSetting } from '@/app/actions/settings'
 import { NOT_ABANDONED } from '@/lib/orderFilters'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
+import { isAdminLinkPayment, adminLinkExpiresAt } from '@/lib/payments/openLink'
 import { adminT } from '@/lib/adminT'
 import Link from 'next/link'
 import WineOrdersClient from './WineOrdersClient'
@@ -47,8 +48,12 @@ export default async function WineOrdersPage() {
     const paidSoFar = payments.filter(p => p.settledAt).reduce((sum, p) => sum + p.amount, 0)
     const due = wineOrderAmountDue(o)
     const feeOwed = o.paidAt && due != null ? due - paidSoFar : 0
+    // Only a link that can still be paid: one past its lifetime (10 h for old links, 7 days for new
+    // ones — lib/payments/openLink.ts) is dead and must not read as "a link is waiting".
+    const now = new Date()
     const link = payments
-      .filter(p => !p.settledAt && p.status === 'created' && p.flittOrderId?.includes('-topup-'))
+      .filter(p => !p.settledAt && p.status === 'created' && isAdminLinkPayment(p.flittOrderId)
+        && adminLinkExpiresAt(p.createdAt, p.flittOrderId) > now)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
     const pendingLink = link ? { amount: link.amount, createdAt: link.createdAt.toISOString() } : null
     if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed, pendingLink }

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { checkOrderStatus } from '@/lib/payments/flitt'
 import { settlePayment } from '@/lib/payments/settle'
+// The window (younger than 1 h = leave alone; older than 7 days, or 9 for admin card links = dead row)
+// lives in openLink.ts beside the link lifetime it must outlast.
+import { reconcileCandidateWhere } from '@/lib/payments/openLink'
 
 /**
  * Daily reconciliation for Flitt payments that never got a callback at all
@@ -58,17 +61,6 @@ import { settlePayment } from '@/lib/payments/settle'
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
-/** A payment younger than this might still get a callback any second — leave it alone. */
-const STUCK_AFTER_MS = 60 * 60 * 1000 // 1 hour
-
-/**
- * A payment older than this is treated as a dead row, not re-queried forever.
- * Not specified anywhere precise — a sane default so this job doesn't keep
- * paying the cost of asking Flitt about ancient, essentially-abandoned
- * checkouts on every single run.
- */
-const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
-
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
   if (!secret) {
@@ -84,17 +76,9 @@ export async function GET(request: Request) {
   const startedAt = Date.now()
   const now = Date.now()
 
-  const candidates = await db.payment.findMany({
-    where: {
-      provider: 'flitt',
-      status: 'created',
-      settledAt: null,
-      createdAt: {
-        lt: new Date(now - STUCK_AFTER_MS),
-        gt: new Date(now - GIVE_UP_AFTER_MS),
-      },
-    },
-  })
+  // Guest checkouts: give up after 7 days; admin card links live 7 days themselves, so they are
+  // followed for 9 (lib/payments/openLink.ts — one definition, tested by scripts/test-link-basics.ts).
+  const candidates = await db.payment.findMany({ where: reconcileCandidateWhere(now) })
 
   let checked = 0
   let settled = 0

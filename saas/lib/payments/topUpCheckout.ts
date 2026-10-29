@@ -54,6 +54,11 @@ import { db } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { wineOrderBalance } from '@/lib/payments/manualPayment'
+import {
+  ADMIN_LINK_MARKER, ADMIN_LINK_LIFETIME_SECONDS, LINK_7D_TAG, adminLinkExpiresAt, findOpenAdminLink,
+} from '@/lib/payments/openLink'
+import { getAllSettings } from '@/app/actions/settings'
+import { settingValue } from '@/lib/settings'
 
 /**
  * A fresh, traceable-by-eye Flitt-facing order_id for one top-up checkout
@@ -65,19 +70,8 @@ import { wineOrderBalance } from '@/lib/payments/manualPayment'
  * against an earlier, possibly-abandoned top-up attempt for the same order.
  */
 export function mintTopUpFlittOrderId(orderId: string): string {
-  return `${orderId}${ADMIN_LINK_MARKER}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-/**
- * The marker inside `Payment.flittOrderId` that says "an admin made this card link" — as opposed
- * to the guest's own checkout at booking time, which sends the plain order id. Read by settle.ts
- * (which emails to send), the return route (result-page wording) and the wine-orders page (which
- * links are still open). Change them together (MaintenanceNotes).
- */
-export const ADMIN_LINK_MARKER = '-topup-'
-
-export function isAdminLinkPayment(flittOrderId: string | null | undefined): boolean {
-  return !!flittOrderId && flittOrderId.includes(ADMIN_LINK_MARKER)
+  // `7d-` tags a link made with the 7-day lifetime (lib/payments/openLink.ts reads it back).
+  return `${orderId}${ADMIN_LINK_MARKER}${LINK_7D_TAG}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 /**
@@ -110,8 +104,37 @@ export type StartTopUpCheckoutInput = {
 }
 
 export type StartTopUpCheckoutResult =
-  | { success: true; checkoutUrl: string; paymentId: string }
+  | {
+      success: true
+      checkoutUrl: string
+      paymentId: string
+      /** When the link stops working (ISO). */
+      expiresAt: string
+      /** True when an already-open link for the same amount was handed back instead of a new one. */
+      reused?: boolean
+    }
   | { error: string }
+
+/**
+ * The Flitt page's language for an admin link (Q-8): the admin's own language setting, else the
+ * winery's default, else English. The customer opens it on their phone; the admin only ever sees
+ * the link. Read from settings by tenant id — no request context is needed.
+ */
+async function checkoutLocale(tenantId: string): Promise<'ka' | 'en'> {
+  const settings = await getAllSettings(tenantId)
+  const l = settingValue(settings, 'admin_language') || settingValue(settings, 'default_locale')
+  return l === 'ka' ? 'ka' : 'en'
+}
+
+/** One open link per order (Q-5): the same amount again hands back the link that is already payable. */
+async function reuseOpenLink(
+  ref: { orderId: string } | { wineOrderId: string },
+  amount: number
+): Promise<StartTopUpCheckoutResult | null> {
+  const open = await findOpenAdminLink(db, ref)
+  if (!open || open.amount !== amount) return null
+  return { success: true, checkoutUrl: open.checkoutUrl, paymentId: open.id, expiresAt: open.expiresAt.toISOString(), reused: true }
+}
 
 export async function startTopUpCheckout(
   input: StartTopUpCheckoutInput
@@ -143,7 +166,7 @@ export async function startTopUpCheckout(
     }
   }
 
-  return runTopUpCheckout({ orderId: input.orderId }, input)
+  return (await reuseOpenLink({ orderId: input.orderId }, input.amount)) ?? runTopUpCheckout({ orderId: input.orderId }, input)
 }
 
 /**
@@ -173,7 +196,7 @@ export async function startWineTopUpCheckout(
       error: `That's more than the outstanding balance of ${formatTetri(owed.balance, { decimals: true })}.`,
     }
   }
-  return runTopUpCheckout({ wineOrderId: input.wineOrderId }, input)
+  return (await reuseOpenLink({ wineOrderId: input.wineOrderId }, input.amount)) ?? runTopUpCheckout({ wineOrderId: input.wineOrderId }, input)
 }
 
 /** Credentials + the Flitt call + finding our own Payment row — shared by both top-ups. */
@@ -207,8 +230,10 @@ async function runTopUpCheckout(
     ...target,
     amount: input.amount,
     orderDesc: input.orderDesc,
-    locale: input.locale,
+    locale: input.locale ?? (await checkoutLocale(input.tenantId)),
     flittOrderId,
+    // 7 days instead of Flitt's 10 h default (Q-4). The guest's own checkout keeps the default.
+    lifetimeSeconds: ADMIN_LINK_LIFETIME_SECONDS,
   })
 
   if (!checkoutUrl) {
@@ -223,7 +248,7 @@ async function runTopUpCheckout(
   const paymentRow = await db.payment.findFirst({
     where: { ...target, tenantId: input.tenantId, provider: 'flitt', checkoutUrl },
     orderBy: { createdAt: 'desc' },
-    select: { id: true },
+    select: { id: true, createdAt: true },
   })
   if (!paymentRow) {
     // Should not happen — startCheckout() only returns a URL after its own
@@ -232,5 +257,10 @@ async function runTopUpCheckout(
     return { error: 'Checkout was created but could not be located afterward. Do not send this link — contact support.' }
   }
 
-  return { success: true, checkoutUrl, paymentId: paymentRow.id }
+  return {
+    success: true,
+    checkoutUrl,
+    paymentId: paymentRow.id,
+    expiresAt: adminLinkExpiresAt(paymentRow.createdAt, flittOrderId).toISOString(),
+  }
 }

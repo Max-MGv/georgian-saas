@@ -49,6 +49,8 @@ export async function startCheckout(input: {
    * reconciliation cron (KnownBugs.md #61) never has to guess it back.
    */
   flittOrderId?: string
+  /** Seconds the link stays payable; omitted → Flitt's 10 h default (the guest's own checkout). */
+  lifetimeSeconds?: number
 }): Promise<string | null> {
   // The tenant's real domain for this request — never hardcoded. The old site
   // pinned https://www.nikalasmarani.ge/ in the controller, which broke the
@@ -73,6 +75,7 @@ export async function startCheckout(input: {
     responseUrl: `${base}/api/payments/flitt/return`,
     serverCallbackUrl: `${base}/api/payments/flitt/callback`,
     lang: input.locale === 'ka' ? 'ka' : 'en',
+    lifetime: input.lifetimeSeconds,
     // Cross-check only — the callback's authoritative tenant binding is the
     // Payment row itself (settle.ts), which survives a mid-payment domain move.
     merchantData: input.tenantId,

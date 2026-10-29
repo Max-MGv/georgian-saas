@@ -28,7 +28,7 @@ tags: [plan, payments, flitt, orders, wine-orders, active]
 | 1 | T-321: stop the wrong "booking confirmed, paid in full" email + result-page wording | **R1** alone | ✅ **built + verified on localhost, on `staging` 2026-10-29 — NOT on production** (see §7 Chunk 1 "Result") |
 | 2 | Settlement rules: card money marks Confirmed/Completed orders Paid; cancelled → flagged | R2 | 🚧 **backend built + verified on localhost (commit local, not pushed)**; Q-11 block + Q-2 warning wait for Max's decision (see §7 Chunk 2 "Result") |
 | 2b | "Nothing to pay" state for 0 ₾ bookings (Q-12) | R2 | 📋 |
-| 3 | Link basics: 7-day lifetime, Georgian checkout, "open link" awareness, reconcile window | R2 | 📋 |
+| 3 | Link basics: 7-day lifetime, Georgian checkout, "open link" awareness, reconcile window | R2 | ✅ **backend built + verified on localhost incl. the real Flitt test merchant (commit local, not pushed)** — the "open link" warning/"valid until" display is UI → Chunk 4/5 |
 | 4 | Mockup of the third option (all pickers, desktop + phone, EN + KA) → Max decides | — | 📋 |
 | 5 | Shared "Card" step: link + QR + live "Paid ✓", in the booking order page picker | R3 | 📋 |
 | 6 | Same step in the other pickers: bookings list, phone card, Abandoned, wine orders | R3 | 📋 |
@@ -267,6 +267,35 @@ in `sendSettlementEmail`).
   the lifetime) used by Card (reuse) and by Bank/Cash (warning). Fix the wine page's pending-link filter to
   ignore expired links.
 - **Verify:** staging test merchant: Georgian checkout; reuse; expiry logic by script with a back-dated row.
+
+**Result (2026-10-29, night) — backend done, no schema, no UI.**
+- **Built:**
+  - `lib/payments/flitt.ts` + `startCheckout.ts` — optional `lifetime` (seconds) passed to Flitt; the guest's own booking checkout sets none (stays 10 h).
+  - `lib/payments/openLink.ts` (NEW, leaf module) — owns the `-topup-` marker + `isAdminLinkPayment` (moved here from `topUpCheckout.ts`, so
+    settle / return route / wine page / this module share ONE definition), `ADMIN_LINK_LIFETIME_SECONDS` (7 d), `adminLinkExpiresAt`,
+    `findOpenAdminLink` (newest unsettled, unreversed, `created`/`processing`, unexpired admin link of an order) and `reconcileCandidateWhere`.
+  - `topUpCheckout.ts` — every admin link asks Flitt for 7 days and is minted as `…-topup-7d-<ts>-<rand>`; **the `7d` tag is how a link's lifetime is
+    read back without a migration** — links made before this change have no tag and are treated as the 10-hour links they are (P-4). Checkout
+    language = the tenant's `admin_language`, else `default_locale`, else English (Q-8; fixes P-5 for both admin actions in one place).
+    **One open link per order (Q-5):** asking for the same amount again returns the open link (`reused: true`, `expiresAt`) instead of making a
+    second; a different amount makes a new link (the old one stays payable — Flitt cannot cancel). Results now carry `expiresAt`.
+  - `app/api/cron/reconcile-payments/route.ts` — window via `reconcileCandidateWhere`: guest checkouts 7 days, **admin links 9 days** (7 + 2, Q-13), nothing younger than 1 h.
+  - `app/admin/(panel)/wine-orders/page.tsx` — the "link waiting" mark ignores expired links (was: any unsettled link ever).
+- **Verified:** full-project `tsc` clean, ESLint clean on the touched files. `scripts/test-link-basics.ts --write --flitt` **19/19**: lifetime read back from references;
+  open-link rules on back-dated rows (expired 7 d, 11-h-old old-style, settled, declined, guest checkout → none open; 2-h-old old-style open; in-flight counts;
+  newest wins); same-amount reuse for a booking and a wine order with no second row; the reconcile window on six back-dated rows; **real Flitt test merchant:
+  lifetime 604800 + `lang: ka` accepted**. Regression: `test-settle-stages` 120/120, `test-settle-admin-link` 11/11, `test-settle-double-payment` 11/11,
+  `test-settle-wine-fee-topup` 9/9, `test-payment-ledger` 16/16, `test-topup-checkout` 3/3. Dev backups by the hook before each write.
+- **Proved against Flitt itself (not just "accepted"):** (1) the checkout page opened in Georgian — checkout info says `"lang":"ka"`, page in ქართული;
+  (2) Flitt exposes no expiry field and did NOT refuse a lifetime above its documented maximum (69 120 000 s) — so "accepted" proves nothing; therefore a
+  60-second link and a default-lifetime control were created together, and after 80 s the 60-s link showed **"Declined — 1035 Token not found"** while the
+  control still loaded: **Flitt honours `lifetime`**. The 7-day value itself can only be confirmed by waiting; the mechanism is proven.
+- **Behaviour changes to know:** pressing "Send card-payment link" twice for the same amount now hands back the same link (before: a second link each time);
+  existing (old-style) open links count as 10-hour links, so the wine "link waiting" mark disappears after 10 h for them.
+- **Not done here (UI, Chunk 4/5):** showing "valid until <date>", the "a link is still open" warning on Bank/Cash, and the reuse wording.
+- **Resume point:** Chunks 1 (on staging), 2 + 3 (backend, committed locally, not pushed). **Next: Chunk 4 — the mockup** (Card as the third option; the Card popup
+  states; the cancelled-order warning (Q-2); the 0 ₾ / no-price error notice (Q-11); the "Nothing to pay" pill (Chunk 2b); the open-link warning; desktop + 375 px, EN + KA)
+  for Max to decide before any UI is built (Rule 12). No further code until then.
 
 ### Chunk 4 — Mockup → Max decides
 Desktop + 375 px, EN + KA: the picker with three options; the Card popup (amount, QR, Copy, Email,
