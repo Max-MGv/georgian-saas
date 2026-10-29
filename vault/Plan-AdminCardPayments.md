@@ -177,12 +177,23 @@ in `sendSettlementEmail`).
   temporary `.env.development.local`, deleted afterwards; dev-server log showed exactly the two expected
   attempts). Regression: `test-settle-double-payment.ts` 11/11, `test-settle-wine-fee-topup.ts` 9/9. Result page
   checked on localhost EN + KA (text matrix for success / link / failed / pending / bogus `kind`, screenshots EN + KA).
-- **Not verified:** the Messages-tab pill was not opened in a browser (admin login not used on localhost) — tsc only;
-  tier 5 on staging — see Resume point.
-- **Resume point:** Chunk 1 is on `staging` only. Next: (a) tier 5 against staging once its deploy is READY
-  (`payment-post-payment-extras.spec.ts` + `payment-approved-settlement.spec.ts`, Resend log shows no booking
-  mail for the top-up); (b) Max tests T-321 on staging ("Waiting for me"); (c) his explicit go before R1 goes to
-  master. **Do not start Chunk 2** until Max says so.
+- **Tier 5 on staging (real Flitt test merchant), 2026-10-29: ✅** `payment-post-payment-extras.spec.ts` 1/1
+  (1.3 min) against `staging.vineworks.ge` at `ca808af`: two real settlements on one booking — the guest checkout,
+  then a real card-link top-up. Resend send log for that window: settlement #1 → guest "booking … is confirmed" +
+  winery "New booking" (as before); settlement #2 (the top-up) → **no email**; the only later send is the invoice
+  the spec re-sends itself. (`payment-approved-settlement.spec.ts` not run separately — #1 above already covers
+  the guest-checkout email path.)
+- **Staging build failure on the first push (mine):** `160edbf` failed `next build` on Vercel (ERROR) — the app code
+  compiled, but the type-check of the NEW script `scripts/test-settle-admin-link.ts` failed (narrowing of `secret`
+  lost inside a function declaration). I had run `tsc` before writing the script and not after. Fixed in `ca808af`
+  (deploy READY). **Lesson: run the full-project `tsc` as the LAST step before every push, after the final file is
+  written; Vercel type-checks `scripts/` too.**
+- **Not verified:** the Messages-tab pill (Admin → Content → Messages → "Paid via a link we sent") was not opened
+  in a browser (admin login not used on localhost) — tsc only; Max can look at it on staging.
+- **Resume point:** Chunk 1 is on `staging` only (`160edbf` + `ca808af`). Next: (a) Max tests T-321 on staging
+  ("Waiting for me" on the ticket); (b) his explicit go before R1 goes to master. **Chunk 2 not started** — it
+  rewrites the same `settle.ts`, so putting it on staging before R1 is tested would stop R1 shipping alone; start it
+  only when Max says so.
 
 ### Chunk 2 — Settlement rules (R2)
 - `settle.ts:253-262`: `stage: 'NEW'` → `stage: { not: 'CANCELLED' }`, keep `paidAt: null`. Setting `paidAt`
