@@ -25,7 +25,7 @@ export default async function WineOrdersPage() {
         // Settled, live payments — only to work out what is still owed (T-8, Chunk 6).
         // Live payments: settled ones count towards what is owed; an unsettled delivery-fee card link
         // (its Flitt reference carries '-topup-') is shown so a second link is a conscious choice.
-        payments: { where: { reversedAt: null }, select: { amount: true, settledAt: true, status: true, flittOrderId: true, createdAt: true } },
+        payments: { where: { reversedAt: null }, select: { amount: true, settledAt: true, status: true, flittOrderId: true, createdAt: true, method: true } },
         // T-12 — the exporter label comes from the company, live (it is a label, not a fact of the order).
         company: { select: { isExporter: true } },
         // T-22 — a guest purchase says which visit it came from (a link, never a copy: the booking's date / company stay live).
@@ -46,6 +46,8 @@ export default async function WineOrdersPage() {
       : null
     const o = { ...rest, isExporter: company?.isExporter ?? false, visit }
     const paidSoFar = payments.filter(p => p.settledAt).reduce((sum, p) => sum + p.amount, 0)
+    // Live card money — only the cancelled-order notice reads it (T-318 Q-2).
+    const cardPaid = payments.filter(p => p.settledAt && p.method === 'CARD').reduce((sum, p) => sum + p.amount, 0)
     const due = wineOrderAmountDue(o)
     const feeOwed = o.paidAt && due != null ? due - paidSoFar : 0
     // Only a link that can still be paid: one past its lifetime (10 h for old links, 7 days for new
@@ -56,9 +58,9 @@ export default async function WineOrdersPage() {
         && adminLinkExpiresAt(p.createdAt, p.flittOrderId) > now)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
     const pendingLink = link ? { amount: link.amount, createdAt: link.createdAt.toISOString() } : null
-    if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed, pendingLink }
+    if (due != null) return { ...o, displayTotal: due, totalEstimated: false, feeOwed, pendingLink, cardPaid }
     const estimated = o.wineItems.reduce((sum, i) => sum + i.quantity * i.priceSnapshot, 0)
-    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0, feeOwed, pendingLink }
+    return { ...o, displayTotal: estimated > 0 ? estimated : null, totalEstimated: estimated > 0, feeOwed, pendingLink, cardPaid }
   })
 
   return (

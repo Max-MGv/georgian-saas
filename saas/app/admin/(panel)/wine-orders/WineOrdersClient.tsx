@@ -23,6 +23,7 @@ import {
 } from '@/lib/statusFlow'
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
@@ -110,6 +111,8 @@ type WineOrder = {
   feeOwed: number
   /** The newest unpaid delivery-fee card link, if any. */
   pendingLink: { amount: number; createdAt: string } | null
+  /** Live card money (tetri) — only read by the "paid by card on a cancelled order" notice (T-318 Q-2). */
+  cardPaid?: number
   /** T-14 — the customer's preferred delivery / pickup day (date only). */
   preferredDate: Date | string | null
   /** T-12 — the ordering company is marked as an exporter. */
@@ -1611,6 +1614,9 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
       // T-318: a refused change ("Set the price first") used to leave the optimistic patch standing.
       if (statusNotice.report(result, 'wine', prev.businessName)) {
         setOrders(p => p.map(o => (o.id === id ? prev : o)))
+      } else if ('success' in result && result.reopenedPaid) {
+        // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
+        setOrders(p => p.map(o => (o.id === id ? { ...o, paidAt: new Date() } : o)))
       }
     })
   }
@@ -1765,6 +1771,9 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
                         <p>&#128205; {order.addressLabel && <span className="font-medium">{order.addressLabel} — </span>}{order.address}</p>
                         {order.workingHours && <p>&#128336; {order.workingHours}</p>}
                       </>
+                    )}
+                    {order.stage === 'CANCELLED' && (
+                      <CardMoneyOnCancelledNotice amount={order.cardPaid ?? 0} subject="wine" locale={locale} className="my-2" />
                     )}
                     <DeliverySection order={order} locale={locale}
                       onPatch={patch => setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...patch } : o))} />

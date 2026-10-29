@@ -13,7 +13,8 @@
 export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY'
 
 export type StatusChangeResult =
-  | { success: true }
+  /** `reopenedPaid`: a cancelled order was reopened and, because card money already covers it, marked Paid again. */
+  | { success: true; reopenedPaid?: true }
   | { error: string; code?: StatusRefusalCode }
 
 /**

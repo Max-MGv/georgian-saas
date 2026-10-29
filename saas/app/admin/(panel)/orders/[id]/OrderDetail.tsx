@@ -24,6 +24,7 @@ import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -865,6 +866,8 @@ export default function OrderDetail({
     const result = await changeBookingStatus(order.id, change)
     // T-318: a refused change used to leave the optimistic patch standing — put the flow back.
     if (statusNotice.report(result, 'booking', `${order.name} ${order.surname}`)) setFlow(before)
+    // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
+    else if ('success' in result && result.reopenedPaid) setFlow(prev => ({ ...prev, paidAt: new Date() }))
   }
 
   /** A menu step was clicked — 'paid' opens the method picker instead of
@@ -1370,6 +1373,11 @@ export default function OrderDetail({
       </div>
 
       <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
+      {isCancelled(flow) && (
+        <CardMoneyOnCancelledNotice
+          amount={order.payments.filter(p => p.method === 'CARD').reduce((sum, p) => sum + p.amount, 0)}
+          subject="booking" locale={locale} className="mb-3" />
+      )}
 
       {/* The merged one-line flow. Sits under the header rather than beside the
           pill because it is the whole story of the order, and the pill is only

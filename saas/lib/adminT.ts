@@ -408,6 +408,8 @@ const en: Translations = {
   'statusNotice.nothingToPay.body': 'This booking{who} costs 0 ₾, so there is nothing to mark as paid.',
   'statusNotice.failed.title': 'The status was not changed.',
   'statusNotice.failed.body': 'Nothing was saved — please try again.',
+  'cardOnCancelled.booking': '{amount} was paid by card on this cancelled booking. Refund it in Flitt if it is due.',
+  'cardOnCancelled.wine': '{amount} was paid by card on this cancelled wine order. Refund it in Flitt if it is due.',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
@@ -1994,6 +1996,8 @@ const ka: Translations = {
   'statusNotice.nothingToPay.body': 'ამ ჯავშნის ღირებულება 0 ₾-ია{who}, ამიტომ გადახდილად აღსანიშნავი არაფერია.',
   'statusNotice.failed.title': 'სტატუსი არ შეიცვალა.',
   'statusNotice.failed.body': 'არაფერი შეინახა — სცადეთ ხელახლა.',
+  'cardOnCancelled.booking': 'ამ გაუქმებულ ჯავშანზე ბარათით გადახდილია {amount}. საჭიროების შემთხვევაში დააბრუნეთ თანხა Flitt-ში.',
+  'cardOnCancelled.wine': 'ამ გაუქმებულ ღვინის შეკვეთაზე ბარათით გადახდილია {amount}. საჭიროების შემთხვევაში დააბრუნეთ თანხა Flitt-ში.',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',

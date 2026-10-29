@@ -939,6 +939,9 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     // used to leave the optimistic patch standing until the next refresh. Put the row back.
     if (statusNotice.report(result, 'booking', before ? `${before.name} ${before.surname}` : '') && before) {
       setOrders(prev => prev.map(o => (o.id === orderId ? before : o)))
+    } else if ('success' in result && result.reopenedPaid) {
+      // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
+      setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, paidAt: new Date() } : o)))
     }
   }
 

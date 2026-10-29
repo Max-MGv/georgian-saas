@@ -331,6 +331,17 @@ export async function sendSettlementEmail(
 ): Promise<void> {
   if (adminLink && orderId) return
 
+  // Card money on a CANCELLED order (T-318 Q-2, Max 2026-10-29 "as recommended"): nobody is told
+  // "booking confirmed" / "New paid booking" / "your receipt" about an order that was called off.
+  // The money is on the ledger and the order page shows an amber "refund it in Flitt" notice.
+  // Service-role read, like the rest of this function: the tenant is the payment's own.
+  const stage = orderId
+    ? (await db.order.findUnique({ where: { id: orderId }, select: { stage: true } }))?.stage
+    : wineOrderId
+      ? (await db.wineOrder.findUnique({ where: { id: wineOrderId }, select: { stage: true } }))?.stage
+      : undefined
+  if (stage === 'CANCELLED') return
+
   const [tenant, settings] = await Promise.all([
     db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     getAllSettings(tenantId),

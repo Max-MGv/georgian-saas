@@ -3,7 +3,7 @@
 import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type OrderContactView } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
-import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
 import { linkEmailRefusal } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
@@ -1009,7 +1009,7 @@ export async function changeBookingStatus(
         where: { id: orderId, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
         // `totalPrice` is read for the ledger row a manual payment writes (chunk 6).
-        select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
+        select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true, abandonedAt: true },
       })
       if (!current) return { count: 0 }
       // Q-11 / Q-12: no price, or a genuinely free booking, cannot be marked paid or
@@ -1019,7 +1019,7 @@ export async function changeBookingStatus(
       if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = toCurrentDates(current)
-      const data =
+      const basePatch =
         change.kind === 'stage'
           ? bookingStagePatch(change.stage as BookingStage, dates, now)
           : change.kind === 'paid'
@@ -1027,6 +1027,15 @@ export async function changeBookingStatus(
             : change.kind === 'invoiceSent'
               ? invoiceSentPatch(change.value, dates, now)
               : { abandonedAt: null }
+      // Reopening a cancelled order that took card money while cancelled (an old link paid late —
+      // T-318 Q-2): settlement refused to mark it Paid then, so it would show Unpaid with the money
+      // on file. If the live payments cover the total, it is Paid again. `paidAt` only; the stage is
+      // whatever the admin chose. Never touches an abandoned row (its own constraint).
+      const reopensPaid =
+        change.kind === 'stage' && current.stage === 'CANCELLED' && change.stage !== 'CANCELLED'
+        && current.paidAt == null && current.abandonedAt == null
+        && await liveMoneyCovers(tx, { orderId }, current.totalPrice ?? 0)
+      const data = reopensPaid ? { ...basePatch, paidAt: now } : basePatch
       const updated = await tx.order.updateMany({ where: { id: orderId, tenantId }, data })
       if (updated.count > 0) {
         // Every payment is a ledger row now, whatever channel it arrived
@@ -1053,14 +1062,14 @@ export async function changeBookingStatus(
           toStage: change.kind === 'stage' ? change.stage : null,
         })
       }
-      return updated
+      return { ...updated, reopenedPaid: reopensPaid }
     })
     if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
     revalidatePath(`/admin/orders/${orderId}`)
     revalidatePath('/admin/abandoned')
-    return { success: true }
+    return 'reopenedPaid' in result && result.reopenedPaid ? { success: true, reopenedPaid: true } : { success: true }
   } catch {
     return { error: 'Failed to update status.' }
   }

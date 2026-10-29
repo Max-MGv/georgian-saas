@@ -4,7 +4,7 @@ import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
 import { isIsoDate } from '@/lib/isoDate'
 import { asTetri } from '@/lib/money'
-import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment } from '@/lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment, liveMoneyCovers } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { priceWineOrder } from '@/lib/winePricing'
 import { startWineTopUpCheckout } from '@/lib/payments/topUpCheckout'
@@ -59,7 +59,7 @@ export async function changeWineOrderStatus(
         // `stage` is selected for the history row's fromStage, not for the patch.
         // `totalAmount` is read for the ledger row a manual payment writes (chunk 6).
         // `deliveryFee` too since T-8: "paid" means wines + delivery fee (lib/wineOrderMoney.ts).
-        select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true },
+        select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true, abandonedAt: true },
       })
       if (!current) return { count: 0 }
       // Q-11: nothing priced = nothing to mark paid (a fee still "to be set" counts as 0,
@@ -72,12 +72,19 @@ export async function changeWineOrderStatus(
         finishedAt: current.deliveredAt,
         paidAt: current.paidAt,
       }
-      const data =
+      const basePatch =
         change.kind === 'stage'
           ? wineOrderStagePatch(change.stage as WineOrderStage, dates, now)
           : change.kind === 'paid'
             ? paidPatch(change.value, dates, now)
             : { abandonedAt: null }
+      // Reopening a cancelled wine order that took card money while cancelled: Paid again when the
+      // live payments cover wines + fee (T-318 Q-2) — same rule as bookings.
+      const reopensPaid =
+        change.kind === 'stage' && current.stage === 'CANCELLED' && change.stage !== 'CANCELLED'
+        && current.paidAt == null && current.abandonedAt == null
+        && await liveMoneyCovers(tx, { wineOrderId: id }, wineOrderAmountDue(current) ?? 0)
+      const data = reopensPaid ? { ...basePatch, paidAt: now } : basePatch
       const updated = await tx.wineOrder.updateMany({ where: { id, tenantId }, data })
       if (updated.count > 0) {
         if (change.kind === 'paid') {
@@ -100,13 +107,13 @@ export async function changeWineOrderStatus(
           toStage: change.kind === 'stage' ? change.stage : null,
         })
       }
-      return updated
+      return { ...updated, reopenedPaid: reopensPaid }
     })
     if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Wine order not found.' }
     revalidatePath('/admin/wine-orders')
     revalidatePath('/admin/abandoned')
-    return { success: true }
+    return 'reopenedPaid' in result && result.reopenedPaid ? { success: true, reopenedPaid: true } : { success: true }
   } catch {
     return { error: 'Failed to update status.' }
   }

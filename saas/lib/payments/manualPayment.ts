@@ -48,6 +48,16 @@ async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
 }
 
 /**
+ * Does the live money already on this order cover `amountDue`? (T-318 Q-2: reopening a cancelled
+ * order that took card money while it was cancelled.) False for a 0 / negative amount — "nothing
+ * to pay" is not "paid".
+ */
+export async function liveMoneyCovers(tx: TxClient, ref: OrderRef, amountDue: number): Promise<boolean> {
+  if (!(amountDue > 0)) return false
+  return (await livePaidSum(tx, ref)) >= amountDue
+}
+
+/**
  * Record a payment an admin marked by hand: whatever is still unpaid of `amount`.
  *
  * `amount` is the FULL amount due on the order (bookings: the total; wine: wines + fee), not what
