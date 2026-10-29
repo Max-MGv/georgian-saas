@@ -18,6 +18,18 @@ export type StatusChangeResult =
   | { error: string; code?: StatusRefusalCode }
 
 /**
+ * A change arrives from the browser, so its shape is checked at runtime, not trusted from the type:
+ * a truthy non-boolean `value` (e.g. 1) would slip past the "=== true" refusals below while the write
+ * path treats it as true, and an unknown `kind` would fall through to "clear abandonedAt".
+ * Returns an error string, or null when the change is well-formed.
+ */
+export function malformedChange(change: { kind?: unknown; value?: unknown }, kinds: readonly string[]): string | null {
+  if (typeof change?.kind !== 'string' || !kinds.includes(change.kind)) return 'Unknown status.'
+  if ((change.kind === 'paid' || change.kind === 'invoiceSent') && typeof change.value !== 'boolean') return 'Unknown status.'
+  return null
+}
+
+/**
  * Whether a booking's total allows a payment / invoice step.
  * `null` total = price not set yet; 0 = genuinely free (Q-11 / Q-12).
  */

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   // call here specifically because this is a real Route Handler request.
   if (result.outcome === 'settled') {
     after(() =>
-      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId, result.adminLink).catch(err =>
+      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId, result.adminLink, result.afterCancellation).catch(err =>
         console.error('[flitt:callback] notification failed —', err instanceof Error ? err.message : err)
       )
     )

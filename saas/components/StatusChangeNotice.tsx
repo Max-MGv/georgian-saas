@@ -17,7 +17,7 @@ import type { StatusChangeResult } from '@/lib/statusRefusal'
 type Subject = 'booking' | 'wine'
 
 export type StatusNoticeState =
-  | { kind: 'noPrice' | 'nothingToPay' | 'failed'; subject: Subject; who: string }
+  | { kind: 'noPrice' | 'nothingToPay' | 'failed'; subject: Subject; who: string; key: string }
   | null
 
 export function useStatusNotice() {
@@ -26,15 +26,16 @@ export function useStatusNotice() {
   /**
    * Feed it the server's result. Returns true when the change did NOT go through, so the
    * caller can put its optimistic patch back. `who` is the guest / customer name, shown in
-   * brackets so the sentence needs no Georgian name inflection.
+   * brackets so the sentence needs no Georgian name inflection. `key` = the row's id.
    */
-  function report(result: StatusChangeResult, subject: Subject, who?: string | null): boolean {
+  function report(result: StatusChangeResult, subject: Subject, who?: string | null, key = ''): boolean {
     if ('success' in result) {
-      setNotice(null)
+      // Only a success on the SAME row clears its own notice — an unrelated row's success must not erase it.
+      setNotice(n => (n && n.key === key ? null : n))
       return false
     }
     const kind = result.code === 'NO_PRICE' ? 'noPrice' : result.code === 'NOTHING_TO_PAY' ? 'nothingToPay' : 'failed'
-    setNotice({ kind, subject, who: (who ?? '').trim() })
+    setNotice({ kind, subject, who: (who ?? '').trim(), key })
     return true
   }
 

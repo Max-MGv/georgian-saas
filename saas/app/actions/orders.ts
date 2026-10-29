@@ -35,7 +35,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
-import { bookingMoneyRefusal, type StatusChangeResult } from '@/lib/statusRefusal'
+import { bookingMoneyRefusal, malformedChange, type StatusChangeResult } from '@/lib/statusRefusal'
 import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
@@ -997,6 +997,8 @@ export async function changeBookingStatus(
   // redesign was opened for was an unvalidated `status: string` that neither
   // the app nor the database rejected; a stage arriving from a dropdown is
   // still a string at runtime however well-typed the call site looks.
+  const malformed = malformedChange(change, ['stage', 'paid', 'invoiceSent', 'restore'])
+  if (malformed) return { error: malformed }
   if (change.kind === 'stage' && !isBookingStage(change.stage)) {
     return { error: 'Unknown status.' }
   }
@@ -1006,6 +1008,10 @@ export async function changeBookingStatus(
     // re-stamping it — the moment an order was really confirmed must not drift
     // forward every time someone touches the row.
     const result = await withTenantDb(tenantId, async tx => {
+      // Lock the row for this transaction (same as recordAdditionalPayment): a card payment settling
+      // at the same moment, or a second admin click, is then checked one after the other against the
+      // money already on the ledger instead of both reading the same sum.
+      await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`
       const current = await tx.order.findFirst({
         where: { id: orderId, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
@@ -1062,6 +1068,13 @@ export async function changeBookingStatus(
           fromStage: change.kind === 'stage' ? current.stage : null,
           toStage: change.kind === 'stage' ? change.stage : null,
         })
+        // The reopen also made the order Paid: say so on the timeline too (not only the stage move).
+        if (reopensPaid) {
+          await recordOrderEvent(tx, {
+            tenantId, orderId, type: 'PAID', actorType: 'ADMIN', actorId: actor?.id ?? null,
+            payload: { reopenedAfterCancellation: true },
+          })
+        }
       }
       return { ...updated, reopenedPaid: reopensPaid }
     })

@@ -64,7 +64,9 @@ export const PAYMENT_FILTERS = ['paid', 'invoiced', 'unpaid', 'nothing'] as cons
 export type PaymentFilter = (typeof PAYMENT_FILTERS)[number]
 
 /** A total that is not exactly 0 ₾ — NULL (price not set yet) included, which SQL's `<> 0` would drop. */
-const NOT_FREE = { OR: [{ totalPrice: null }, { totalPrice: { gt: 0 } }] }
+// (A top-level `OR` — spread into a where that already has its own `OR` it would overwrite it; none of the
+// current callers has one. Keep it that way or fold both into an `AND`.)
+const NOT_FREE = { OR: [{ totalPrice: null }, { totalPrice: { not: 0 } }] }
 
 /**
  * The payment filter, expressed over dates rather than a status column.

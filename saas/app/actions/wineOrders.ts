@@ -24,7 +24,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { WineOrderStatusChange } from '@/lib/statusWrite'
-import { wineMoneyRefusal, type StatusChangeResult } from '@/lib/statusRefusal'
+import { wineMoneyRefusal, malformedChange, type StatusChangeResult } from '@/lib/statusRefusal'
 import type { WineOrderStage } from '@prisma/client'
 
 /**
@@ -45,6 +45,8 @@ export async function changeWineOrderStatus(
   // A stage arrives from a dropdown and is a string at runtime however
   // well-typed the call site looks. Postgres would refuse an invalid enum value
   // too; this turns that into a friendly error rather than a 500.
+  const malformed = malformedChange(change, ['stage', 'paid', 'restore'])
+  if (malformed) return { error: malformed }
   if (change.kind === 'stage' && !isWineOrderStage(change.stage)) {
     return { error: 'Unknown status.' }
   }
@@ -54,6 +56,8 @@ export async function changeWineOrderStatus(
     // re-stamping it — when an order was really confirmed must not drift
     // forward every time someone touches the row.
     const result = await withTenantDb(tenantId, async tx => {
+      // Row lock, as in changeBookingStatus: serialises against a settling card payment and a second click.
+      await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${id} FOR UPDATE`
       const current = await tx.wineOrder.findFirst({
         where: { id, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
@@ -106,6 +110,12 @@ export async function changeWineOrderStatus(
           fromStage: change.kind === 'stage' ? current.stage : null,
           toStage: change.kind === 'stage' ? change.stage : null,
         })
+        if (reopensPaid) {
+          await recordOrderEvent(tx, {
+            tenantId, wineOrderId: id, type: 'PAID', actorType: 'ADMIN', actorId: actor?.id ?? null,
+            payload: { reopenedAfterCancellation: true },
+          })
+        }
       }
       return { ...updated, reopenedPaid: reopensPaid }
     })

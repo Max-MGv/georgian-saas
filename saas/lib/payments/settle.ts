@@ -47,6 +47,9 @@ export type SettleResult =
       // Set on every ok result — also 'already-settled' — because the browser return can land
       // second and still has to word its page right.
       adminLink: boolean
+      // True when this settlement landed on a CANCELLED order (decided inside the settling transaction,
+      // under the order's row lock). The email sender stays silent for it. False on 'already-settled'.
+      afterCancellation: boolean
     }
   | { ok: false; reason: string }
 
@@ -108,6 +111,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // One instant shared by the Payment row and the order's own paidAt, so the
   // gateway record and the order can never disagree about when money arrived.
   const settledAt = new Date()
+  let landedOnCancelled = false
 
   const outcome = await withTenantDb(tenantId, async tx => {
     // ── Gate 3: idempotency ──────────────────────────────────────────────────
@@ -226,12 +230,17 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // Read before anything is written: money that arrives on a CANCELLED order is recorded but must
     // not mark it Paid (below) and must leave a trace a human can find — "refund it in Flitt".
     // The flag rides in the event payload; a new OrderEventType would need a migration.
+    // Lock the order row first (as the admin status actions do): a reopen / Mark-paid happening at this
+    // very moment is then ordered before or after this settlement, never interleaved with it.
+    if (payment.orderId) await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${payment.orderId} FOR UPDATE`
+    else if (payment.wineOrderId) await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${payment.wineOrderId} FOR UPDATE`
     const stageNow = payment.orderId
       ? (await tx.order.findUnique({ where: { id: payment.orderId }, select: { stage: true } }))?.stage
       : payment.wineOrderId
         ? (await tx.wineOrder.findUnique({ where: { id: payment.wineOrderId }, select: { stage: true } }))?.stage
         : undefined
     const afterCancellation = stageNow === 'CANCELLED'
+    landedOnCancelled = afterCancellation
 
     await recordOrderEvent(tx, {
       tenantId,
@@ -297,6 +306,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     orderId: payment.orderId,
     wineOrderId: payment.wineOrderId,
     adminLink: isAdminLinkPayment(payment.flittOrderId),
+    afterCancellation: outcome === 'settled' && landedOnCancelled,
   }
 }
 
@@ -327,7 +337,9 @@ export async function sendSettlementEmail(
   tenantId: string,
   orderId: string | null,
   wineOrderId: string | null,
-  adminLink: boolean
+  adminLink: boolean,
+  /** `SettleResult.afterCancellation` — decided at settle time. Left out by scripts: then the stage is read here. */
+  afterCancellation?: boolean
 ): Promise<void> {
   if (adminLink && orderId) return
 
@@ -335,12 +347,15 @@ export async function sendSettlementEmail(
   // "booking confirmed" / "New paid booking" / "your receipt" about an order that was called off.
   // The money is on the ledger and the order page shows an amber "refund it in Flitt" notice.
   // Service-role read, like the rest of this function: the tenant is the payment's own.
-  const stage = orderId
-    ? (await db.order.findUnique({ where: { id: orderId }, select: { stage: true } }))?.stage
-    : wineOrderId
-      ? (await db.wineOrder.findUnique({ where: { id: wineOrderId }, select: { stage: true } }))?.stage
-      : undefined
-  if (stage === 'CANCELLED') return
+  if (afterCancellation === true) return
+  if (afterCancellation === undefined) {
+    const stage = orderId
+      ? (await db.order.findUnique({ where: { id: orderId }, select: { stage: true } }))?.stage
+      : wineOrderId
+        ? (await db.wineOrder.findUnique({ where: { id: wineOrderId }, select: { stage: true } }))?.stage
+        : undefined
+    if (stage === 'CANCELLED') return
+  }
 
   const [tenant, settings] = await Promise.all([
     db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),

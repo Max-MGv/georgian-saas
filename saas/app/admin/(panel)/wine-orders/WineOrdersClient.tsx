@@ -24,6 +24,8 @@ import {
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
+import { revertPatch } from '@/lib/revertPatch'
+import type { StatusChangeResult } from '@/lib/statusRefusal'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
@@ -1610,10 +1612,17 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
       setTimeout(() => setRecentlyInactive(s => { const n = new Set(s); n.delete(id); return n }), 520)
     }
     startTransition(async () => {
-      const result = await changeWineOrderStatus(id, change)
+      let result: StatusChangeResult
+      try {
+        result = await changeWineOrderStatus(id, change)
+      } catch {
+        // An expired session or a dropped connection rejects the call instead of returning { error }.
+        result = { error: 'Failed to update status.' }
+      }
       // T-318: a refused change ("Set the price first") used to leave the optimistic patch standing.
-      if (statusNotice.report(result, 'wine', prev.businessName)) {
-        setOrders(p => p.map(o => (o.id === id ? prev : o)))
+      // Put back only what this change touched, so a later change to the same card survives.
+      if (statusNotice.report(result, 'wine', prev.businessName, id)) {
+        setOrders(p => p.map(o => (o.id === id ? revertPatch(o, prev, next) : o)))
       } else if ('success' in result && result.reopenedPaid) {
         // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
         setOrders(p => p.map(o => (o.id === id ? { ...o, paidAt: new Date() } : o)))

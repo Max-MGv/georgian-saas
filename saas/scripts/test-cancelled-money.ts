@@ -90,6 +90,9 @@ async function main() {
     check('both settle', rLive.ok && rLive.outcome === 'settled' && rDead.ok && rDead.outcome === 'settled')
     if (rLive.ok) check('live booking: the confirmation / winery mail IS attempted (control)', await emailChoice(rLive.orderId, rLive.wineOrderId, rLive.adminLink) === 'sent')
     if (rDead.ok) check('CANCELLED booking: no mail is attempted', await emailChoice(rDead.orderId, rDead.wineOrderId, rDead.adminLink) === 'silent')
+    check('settle reports afterCancellation: true for the cancelled booking, false for the live one',
+      rDead.ok && rDead.afterCancellation === true && rLive.ok && rLive.afterCancellation === false)
+    if (rDead.ok) check('the explicit flag is honoured by the sender (no stage lookup needed)', await sendSettlementEmail(TENANT, rDead.orderId, rDead.wineOrderId, rDead.adminLink, true).then(() => 'silent', () => 'threw') === 'silent')
     const deadNow = await db.order.findUnique({ where: { id: dead.id }, select: { paidAt: true, stage: true } })
     check('CANCELLED booking: money recorded, order NOT marked paid, still cancelled', deadNow?.paidAt == null && deadNow?.stage === 'CANCELLED')
     const ev = await db.orderEvent.findFirst({ where: { orderId: dead.id, type: 'PAID' } })

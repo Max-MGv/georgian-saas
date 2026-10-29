@@ -25,6 +25,8 @@ import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
+import { revertPatch } from '@/lib/revertPatch'
+import type { StatusChangeResult } from '@/lib/statusRefusal'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -830,8 +832,8 @@ export default function OrderDetail({
    * functions the server action calls rather than restating the rules - two
    * copies of "which columns does this move" is where drift hides.
    */
-  function applyLocally(change: BookingStatusChange) {
-    setFlow(prev => {
+  function flowAfter(prev: FlowState, change: BookingStatusChange): FlowState {
+    {
       const now = new Date()
       const dates = {
         confirmedAt: prev.confirmedAt ? new Date(prev.confirmedAt) : null,
@@ -856,16 +858,27 @@ export default function OrderDetail({
         case 'restore':
           return prev
       }
-    })
+    }
+  }
+
+  function applyLocally(change: BookingStatusChange) {
+    setFlow(prev => flowAfter(prev, change))
   }
 
   async function handleStatusChange(change: BookingStatusChange) {
     setStatusMenuOpen(false)
     const before = flow
-    applyLocally(change)
-    const result = await changeBookingStatus(order.id, change)
-    // T-318: a refused change used to leave the optimistic patch standing — put the flow back.
-    if (statusNotice.report(result, 'booking', `${order.name} ${order.surname}`)) setFlow(before)
+    const after = flowAfter(before, change)
+    setFlow(after)
+    let result: StatusChangeResult
+    try {
+      result = await changeBookingStatus(order.id, change)
+    } catch {
+      // An expired session or a dropped connection rejects the call instead of returning { error }.
+      result = { error: 'Failed to update status.' }
+    }
+    // T-318: a refused change used to leave the optimistic patch standing — put back only what it touched.
+    if (statusNotice.report(result, 'booking', `${order.name} ${order.surname}`, order.id)) setFlow(cur => revertPatch(cur, before, after))
     // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
     else if ('success' in result && result.reopenedPaid) setFlow(prev => ({ ...prev, paidAt: new Date() }))
   }

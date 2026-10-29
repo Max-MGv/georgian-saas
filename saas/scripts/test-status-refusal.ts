@@ -7,7 +7,8 @@
  *
  * Run: npx tsx scripts/test-status-refusal.ts
  */
-import { bookingMoneyRefusal, wineMoneyRefusal } from '../lib/statusRefusal'
+import { bookingMoneyRefusal, wineMoneyRefusal, malformedChange } from '../lib/statusRefusal'
+import { revertPatch } from '../lib/revertPatch'
 
 let passed = 0
 let failed = 0
@@ -38,6 +39,27 @@ check('paid ✓ with 0 due → NO_PRICE', code(wineMoneyRefusal(0, { kind: 'paid
 check('paid ✓ with wines priced (fee still unset counts as 0) → allowed', wineMoneyRefusal(12000, { kind: 'paid', value: true }) === null)
 check('paid ✗ on a 0-due order → allowed', wineMoneyRefusal(0, { kind: 'paid', value: false }) === null)
 check('stage / restore never refused', wineMoneyRefusal(null, { kind: 'stage' }) === null && wineMoneyRefusal(null, { kind: 'restore' }) === null)
+
+console.log('\nMalformed payloads (crafted requests)\n')
+const KINDS = ['stage', 'paid', 'invoiceSent', 'restore']
+check('paid with value 1 (truthy, not boolean) is rejected', malformedChange({ kind: 'paid', value: 1 }, KINDS) !== null)
+check('paid with value "true" (string) is rejected', malformedChange({ kind: 'paid', value: 'true' }, KINDS) !== null)
+check('paid / invoiceSent with a real boolean is accepted',
+  malformedChange({ kind: 'paid', value: true }, KINDS) === null && malformedChange({ kind: 'invoiceSent', value: false }, KINDS) === null)
+check('an unknown kind is rejected (it used to fall through to "clear abandonedAt")',
+  malformedChange({ kind: 'explode' }, KINDS) !== null && malformedChange({}, KINDS) !== null)
+check('stage / restore need no boolean', malformedChange({ kind: 'stage' }, KINDS) === null && malformedChange({ kind: 'restore' }, KINDS) === null)
+
+console.log('\nrevertPatch (a refused change must not undo a later one)\n')
+type Row = { stage: string; paidAt: Date | null }
+const before: Row = { stage: 'CONFIRMED', paidAt: null }
+const after: Row = { stage: 'CONFIRMED', paidAt: new Date(1000) } // optimistic Paid
+check('untouched since → back to before', JSON.stringify(revertPatch(after, before, after)) === JSON.stringify(before))
+const later: Row = { stage: 'COMPLETED', paidAt: new Date(1000) } // the admin then also completed it
+const reverted = revertPatch(later, before, after)
+check('a later change survives: stage stays COMPLETED, only paidAt is put back', reverted.stage === 'COMPLETED' && reverted.paidAt === null, JSON.stringify(reverted))
+const overwritten: Row = { stage: 'CONFIRMED', paidAt: new Date(2000) } // something else set paidAt since
+check('a field someone else changed since is left alone', revertPatch(overwritten, before, after).paidAt?.getTime() === 2000)
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed ? 1 : 0)

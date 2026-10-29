@@ -7,6 +7,7 @@ import { changeBookingStatus } from '@/app/actions/orders'
 import { changeWineOrderStatus } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import type { StatusChangeResult } from '@/lib/statusRefusal'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -168,10 +169,16 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
       // `abandonedAt`, which the database requires anyway — a paid order that
       // stayed abandoned would fail the `*_abandoned_is_unpaid` constraint.
       const change = paid ? { kind: 'paid' as const, value: true, method } : { kind: 'restore' as const }
-      const result = kind === 'bookings' ? await changeBookingStatus(id, change) : await changeWineOrderStatus(id, change)
+      let result: StatusChangeResult
+      try {
+        result = kind === 'bookings' ? await changeBookingStatus(id, change) : await changeWineOrderStatus(id, change)
+      } catch {
+        // An expired session or a dropped connection rejects the call instead of returning { error }.
+        result = { error: 'Failed to update status.' }
+      }
       // T-318: a refused change (no price) must not look done — bring the row back and say why.
       const who = rows.find(r => r.id === id)?.who
-      if (statusNotice.report(result, kind === 'bookings' ? 'booking' : 'wine', who)) {
+      if (statusNotice.report(result, kind === 'bookings' ? 'booking' : 'wine', who, id)) {
         setDone(prev => { const n = new Set(prev); n.delete(id); return n })
       }
       router.refresh()

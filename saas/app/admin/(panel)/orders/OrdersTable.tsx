@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import { revertPatch } from '@/lib/revertPatch'
+import type { StatusChangeResult } from '@/lib/statusRefusal'
 import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
@@ -933,6 +935,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setStatusMenuId(null)
     setStatusMenuRect(null)
     const before = orders.find(o => o.id === orderId)
+    const after = before ? { ...before, ...optimisticPatch(before, change) } : undefined
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
       // Literally the same patch functions the server is about to call, so the
@@ -941,11 +944,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       // which is where that kind of drift would be invisible.
       return { ...o, ...optimisticPatch(o, change) }
     }))
-    const result = await changeBookingStatus(orderId, change)
+    let result: StatusChangeResult
+    try {
+      result = await changeBookingStatus(orderId, change)
+    } catch {
+      // An expired session or a dropped connection rejects the call instead of returning { error }.
+      result = { error: 'Failed to update status.' }
+    }
     // T-318: a refused change ("Set the price first", "Nothing to pay", a failed write)
-    // used to leave the optimistic patch standing until the next refresh. Put the row back.
-    if (statusNotice.report(result, 'booking', before ? `${before.name} ${before.surname}` : '') && before) {
-      setOrders(prev => prev.map(o => (o.id === orderId ? before : o)))
+    // used to leave the optimistic patch standing until the next refresh. Put back ONLY what this
+    // change touched, so a later change to the same row is not thrown away with it.
+    if (statusNotice.report(result, 'booking', before ? `${before.name} ${before.surname}` : '', orderId) && before && after) {
+      setOrders(prev => prev.map(o => (o.id === orderId ? revertPatch(o, before, after) : o)))
     } else if ('success' in result && result.reopenedPaid) {
       // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
       setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, paidAt: new Date() } : o)))
