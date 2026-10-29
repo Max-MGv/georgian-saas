@@ -3,6 +3,7 @@ import { countsOf } from '@/lib/pricingUtils'
 import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
+import { isAdminLinkPayment } from '@/lib/payments/topUpCheckout'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
@@ -42,6 +43,10 @@ export type SettleResult =
       // leave the notification alone.
       orderId: string | null
       wineOrderId: string | null
+      // True when an admin's card link was paid (T-321), false for the guest's own checkout.
+      // Set on every ok result — also 'already-settled' — because the browser return can land
+      // second and still has to word its page right.
+      adminLink: boolean
     }
   | { ok: false; reason: string }
 
@@ -279,7 +284,14 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // return — call `sendSettlementEmail` themselves via `after()`, using the
   // `orderId`/`wineOrderId` returned below. This function only reports the
   // outcome.
-  return { ok: true, outcome, tenantId, orderId: payment.orderId, wineOrderId: payment.wineOrderId }
+  return {
+    ok: true,
+    outcome,
+    tenantId,
+    orderId: payment.orderId,
+    wineOrderId: payment.wineOrderId,
+    adminLink: isAdminLinkPayment(payment.flittOrderId),
+  }
 }
 
 /**
@@ -296,12 +308,23 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
  * genuinely inside a request (a script, a cron job, a queue worker): there is
  * no `after()` to schedule it with out there, so it would go right back to
  * being an unguaranteed fire-and-forget call — the exact bug this split fixed.
+ *
+ * `adminLink` (T-321): the payment came from a card link an admin made, not from the guest's own
+ * checkout. For a BOOKING that sends nothing — the booking already exists and was confirmed when
+ * it was made, so "your booking is confirmed / New paid booking" would be false (and would show
+ * the full total as the amount just paid). Same as Bank/Cash, which email nobody. A WINE ORDER's
+ * receipt is deliberately unchanged for now: it is accurate (it shows what has really been paid)
+ * and whether wine links should stay silent too is decided with the wine Card step
+ * (Plan-AdminCardPayments Chunk 6).
  */
 export async function sendSettlementEmail(
   tenantId: string,
   orderId: string | null,
-  wineOrderId: string | null
+  wineOrderId: string | null,
+  adminLink: boolean
 ): Promise<void> {
+  if (adminLink && orderId) return
+
   const [tenant, settings] = await Promise.all([
     db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     getAllSettings(tenantId),

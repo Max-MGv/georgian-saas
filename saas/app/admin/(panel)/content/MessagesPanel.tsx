@@ -272,7 +272,9 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
   })
 
   const [variant, setVariant] = useState<BookingVariant>('unpaid')
-  const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind>('success')
+  // 'link' = the page after paying a card link the winery sent (T-321): the success heading with its own body.
+  const [paymentVariant, setPaymentVariant] = useState<PaymentResultKind | 'link'>('success')
+  const paymentPreviewKind: PaymentResultKind = paymentVariant === 'link' ? 'success' : paymentVariant
   const [newCompanyVariant, setNewCompanyVariant] = useState<NewCompanyVariant>('withBooking')
   const [accessCodeVariant, setAccessCodeVariant] = useState<AccessCodeVariant>('entry')
   const [savedKey, setSavedKey] = useState<string | null>(null)
@@ -301,6 +303,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
     onsite_confirm_button_pay: c.onsite_confirm_button_pay ?? t(locale, 'form.confirm_button_pay'),
     onsite_payment_success_heading: c.onsite_payment_success_heading ?? t(locale, 'payment.success_heading'),
     onsite_payment_success_body: c.onsite_payment_success_body ?? t(locale, 'payment.success_body'),
+    onsite_payment_link_body: c.onsite_payment_link_body ?? t(locale, 'payment.link_body'),
     onsite_payment_failed_heading: c.onsite_payment_failed_heading ?? t(locale, 'payment.failed_heading'),
     onsite_payment_failed_body: c.onsite_payment_failed_body ?? t(locale, 'payment.failed_body'),
     onsite_payment_pending_heading: c.onsite_payment_pending_heading ?? t(locale, 'payment.pending_heading'),
@@ -731,7 +734,7 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
           onToggle={() => toggle('onsitePayment')}
         >
           <div className="flex flex-wrap gap-2 mb-4">
-            {(['success', 'failed', 'pending'] as PaymentResultKind[]).map(v => (
+            {(['success', 'link', 'failed', 'pending'] as const).map(v => (
               <button
                 key={v}
                 type="button"
@@ -745,17 +748,19 @@ export default function MessagesPanel({ c, locale, adminLocale, winery, theme }:
               </button>
             ))}
           </div>
-          <EditField label={at('messages.onsitePayment.headingLabel')} draftKey={`onsite_payment_${paymentVariant}_heading`}
-            inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          {paymentVariant !== 'link' && (
+            <EditField label={at('messages.onsitePayment.headingLabel')} draftKey={`onsite_payment_${paymentVariant}_heading`}
+              inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
+          )}
           <EditField label={at('messages.onsitePayment.bodyLabel')} draftKey={`onsite_payment_${paymentVariant}_body`} multiline
             inputStyle={inputStyle} savedKey={savedKey} savedLabel={at('messages.saved')} setDraft={setDraft} save={save} drafts={drafts} />
           <p className="text-xs mb-2" style={{ color: C.faint }}>{at('messages.previewLabel')}</p>
           <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#f4f1ec' }}>
             <PaymentResultView
-              kind={paymentVariant}
-              heading={drafts[`onsite_payment_${paymentVariant}_heading`]}
+              kind={paymentPreviewKind}
+              heading={drafts[`onsite_payment_${paymentPreviewKind}_heading`]}
               body={drafts[`onsite_payment_${paymentVariant}_body`]}
-              contactPhone={paymentVariant === 'success' ? undefined : (winery.phone || '+995 555 00 00 00')}
+              contactPhone={paymentPreviewKind === 'success' ? undefined : (winery.phone || '+995 555 00 00 00')}
               backHomeLabel={t(locale, 'payment.back_home')}
               preview
             />

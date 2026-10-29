@@ -21,6 +21,25 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-29 (evening) — T-321 built + verified on localhost, pushed to STAGING (Chunk 1 of Plan-AdminCardPayments; NOT on production)
+
+- **What:** a booking paid through a card link an admin made no longer sends "booking confirmed, paid in full" to the guest or "New paid booking" to the winery; the guest's result page says "Payment received — thank you" without "a confirmation has been sent". Guest's own checkout unchanged. **Max narrowed the scope to bookings only** ("consistency and accuracy, focus on booking only right now"): the wine-order fee link keeps its receipt (accurate; decided with the wine Card step, Chunk 6). Details, files and the verification record: [[Plan-AdminCardPayments]] §7 Chunk 1 "Result". FeatureLog #248, KnownBugs #96 (fixed on staging only).
+- **Verified:** tsc; `scripts/test-settle-admin-link.ts` 16/16 on the dev DB incl. the real return route over HTTP; two older settle scripts 11/11 + 9/9; result page EN + KA. A temporary `saas/.env.development.local` with a blank `RESEND_API_KEY` made the local dev server mail-proof (the Staging Winery's contact email is Max's own inbox) — deleted again. Not verified: the new pill in Admin → Content → Messages (not opened in a browser).
+- **Open for Max:** test T-321 on staging ("Waiting for me"); only he marks it Done; production merge needs his explicit go (the bug is live on production until then). Chunk 2 not started.
+- **Tooling lessons:** the Browser pane's `preview_start` did not see a launch entry I added to `.claude/launch.json` mid-session (reverted); a blank env var in an ignored `.env.development.local` is the clean way to disable mail for a local server. `after()` runs after the response — a script that deletes its rows straight away makes the notification find nothing (wait a few seconds first).
+
+## 2026-10-29 (later) — T-318 explored, blind review, T-321 logged, plan written (nothing built, nothing on production)
+
+- **T-318** (Max: card link / QR wherever an admin takes money): explored the code and ran a blind review (fresh agent, vault and git history off-limits). Every claim of the review I relayed was checked in code first; it contradicted none of my findings and added three: (1) card money only sets `paidAt` while stage is New (`settle.ts:253-262`) → a Confirmed/Completed unpaid order stays "unpaid"; (2) "Mark paid" writes nothing once any settled payment exists (`manualPayment.ts:68`); (3) **live bug:** a top-up card payment sends "booking confirmed, Paid = full total" + "New paid booking".
+- Flitt docs checked: default link `lifetime` 36000 s (10 h), max 69 120 000 s; `lang` supports `ka`.
+- **Written:** T-321 (bug, HIGH, staging board) + KnownBugs #96 (open, on production — code identical on master/staging; not checked whether it fired); T-318 analysis + links; **[[Plan-AdminCardPayments]]** (Chunks 0–10, releases R1–R5, decisions Q-1..Q-9 waiting on Max).
+- **Decided by Max the same day** (plan §3, recorded with `tix decide`): Card = third option in "How was this paid?", auto-Paid when Flitt confirms, from any stage except Cancelled (payment often comes weeks/months later); full amount only, like Bank/Cash; no emails after an admin link (= T-321 fix); one open link per order + warning on Cash; 7-day links; late money on a cancelled order → recorded, not Paid, warning; refunds separate; block Paid at 0 ₾ / no price. Production check (Chunk 0) not now.
+- Found while planning: the reconcile cron gives up after 7 days (`reconcile-payments/route.ts:70`) — must outlive the 7-day links; a genuinely free booking could never leave "Unpaid" once 0 ₾ is blocked (Q-12).
+- Then also decided: Q-12 "Nothing to pay" state for 0 ₾ bookings (new Chunk 2b); Q-7 no Email on wine links for now → **T-322** (Backlog idea); Q-8 checkout in the admin's language; Q-9 fee-not-set wine order → Card charges the wines like Bank/Cash, fee later. **All plan decisions answered.**
+- **Next:** the mockup (Chunk 4), then Max decides on it before any code.
+
+---
+
 ## 2026-10-29 — T-319 + T-320 SHIPPED TO PRODUCTION on Max's go ("draft release notes, screenshots, action points and push to master") — master `3e87079`
 
 - Merge commit `3e87079` (no migrations; code = two component files; vault notes). Backups taken by the hook before the push (prod `2026-10-29_113255_prod_…`, dev). Production deploy `dpl_C9yfVLh…`.

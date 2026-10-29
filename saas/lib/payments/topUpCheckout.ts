@@ -65,7 +65,19 @@ import { wineOrderBalance } from '@/lib/payments/manualPayment'
  * against an earlier, possibly-abandoned top-up attempt for the same order.
  */
 export function mintTopUpFlittOrderId(orderId: string): string {
-  return `${orderId}-topup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  return `${orderId}${ADMIN_LINK_MARKER}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * The marker inside `Payment.flittOrderId` that says "an admin made this card link" — as opposed
+ * to the guest's own checkout at booking time, which sends the plain order id. Read by settle.ts
+ * (which emails to send), the return route (result-page wording) and the wine-orders page (which
+ * links are still open). Change them together (MaintenanceNotes).
+ */
+export const ADMIN_LINK_MARKER = '-topup-'
+
+export function isAdminLinkPayment(flittOrderId: string | null | undefined): boolean {
+  return !!flittOrderId && flittOrderId.includes(ADMIN_LINK_MARKER)
 }
 
 export type StartTopUpCheckoutInput = {

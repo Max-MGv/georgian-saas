@@ -20,7 +20,7 @@ export default async function PaymentResultPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const [{ status }, cookieStore, tenantId] = await Promise.all([
+  const [{ status, kind: linkKind }, cookieStore, tenantId] = await Promise.all([
     searchParams,
     cookies(),
     getTenantId(),
@@ -33,6 +33,13 @@ export default async function PaymentResultPage({
 
   const kind = status === 'success' ? 'success' : status === 'pending' ? 'pending' : 'failed'
 
+  // ?kind=link (set by the return route): an admin's card link was paid. Same heading, but no
+  // "booking confirmed / confirmation sent" — nothing was emailed (T-321). Success only.
+  const isLink = kind === 'success' && linkKind === 'link'
+  const body = isLink
+    ? mc('onsite_payment_link_body', 'payment.link_body')
+    : mc(`onsite_payment_${kind}_body`, `payment.${kind}_body`)
+
   // Failed/pending states point the customer at the winery's phone — the
   // reservation is still held, and a call settles it fastest.
   const contactPhone = kind === 'success' ? '' : settingValue(settings, 'contact_phone')
@@ -41,7 +48,7 @@ export default async function PaymentResultPage({
     <PaymentResultView
       kind={kind}
       heading={mc(`onsite_payment_${kind}_heading`, `payment.${kind}_heading`)}
-      body={mc(`onsite_payment_${kind}_body`, `payment.${kind}_body`)}
+      body={body}
       contactPhone={contactPhone}
       backHomeLabel={t(locale, 'payment.back_home')}
     />
