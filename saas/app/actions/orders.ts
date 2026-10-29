@@ -5,6 +5,7 @@ import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type 
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { linkEmailRefusal } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
@@ -1172,16 +1173,19 @@ export async function sendOrderTopUpCheckoutEmail(
 
   const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
     where: { id: orderId, tenantId },
-    select: { name: true, surname: true, email: true, date: true, timeSlot: true },
+    select: { name: true, surname: true, email: true, date: true, timeSlot: true, stage: true },
   }))
   if (!order) return { error: 'Order not found.' }
   if (!order.email) return { error: 'This order has no email address.' }
 
   const payment = await withTenantDb(tenantId, tx => tx.payment.findFirst({
     where: { id: paymentId, orderId, tenantId, provider: 'flitt' },
-    select: { checkoutUrl: true, amount: true },
+    select: { checkoutUrl: true, amount: true, settledAt: true, createdAt: true, flittOrderId: true },
   }))
   if (!payment || !payment.checkoutUrl) return { error: 'Checkout link not found.' }
+  // Never mail a link that is already paid, expired, or belongs to a cancelled order.
+  const refused = linkEmailRefusal(payment, order.stage)
+  if (refused) return { error: refused }
 
   const [wineryAddress, wineryEmail, tenant] = await Promise.all([
     getSetting('contact_address'),

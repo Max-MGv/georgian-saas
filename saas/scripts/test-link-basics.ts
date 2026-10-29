@@ -18,9 +18,10 @@
 import { db } from '../lib/db'
 import { createCheckout } from '../lib/payments/flitt'
 import {
-  ADMIN_LINK_LIFETIME_SECONDS, adminLinkExpiresAt, adminLinkLifetimeMs, findOpenAdminLink, isAdminLinkPayment, reconcileCandidateWhere,
+  ADMIN_LINK_LIFETIME_SECONDS, adminLinkExpiresAt, adminLinkLifetimeMs, findOpenAdminLink, isAdminLinkPayment, linkEmailRefusal,
+  reconcileCandidateWhere,
 } from '../lib/payments/openLink'
-import { mintTopUpFlittOrderId, startTopUpCheckout, startWineTopUpCheckout } from '../lib/payments/topUpCheckout'
+import { mintTopUpFlittOrderId, pickCheckoutLocale, startTopUpCheckout, startWineTopUpCheckout } from '../lib/payments/topUpCheckout'
 import { seedStageColumns } from '../lib/statusWrite'
 import { asTetri } from '../lib/money'
 
@@ -100,6 +101,11 @@ async function main() {
 
     // ── Part B ───────────────────────────────────────────────────────────────────
     console.log('\nPart B — the same amount again returns the open link (no second one)\n')
+    // Two open links of different amounts: asking for the OLDER one's amount must find it, not the newest (blind test, 2026-10-29).
+    await mk('newer3000', { ref: `${order.id}-topup-7d-oo-pp`, age: 1 * HOUR, amount: 3000 })
+    check('with a newer 3000 link open, the newest open link is the 3000 one', (await findOpenAdminLink(db, { orderId: order.id }))?.amount === 3000)
+    check('…but asking for the 5000 amount finds the older 5000 link', (await findOpenAdminLink(db, { orderId: order.id }, { amount: 5000 }))?.amount === 5000)
+    check('…and an amount with no open link finds none', (await findOpenAdminLink(db, { orderId: order.id }, { amount: 4242 })) === null)
     const before = await db.payment.count({ where: { orderId: order.id } })
     const again = await startTopUpCheckout({ orderId: order.id, tenantId: TENANT, amount: asTetri(5000), orderDesc: 'zz' })
     check('booking: same amount → the existing link back, marked reused',
@@ -123,6 +129,19 @@ async function main() {
     })
     const wAgain = await startWineTopUpCheckout({ wineOrderId: wine.id, tenantId: TENANT, amount: asTetri(1500), orderDesc: 'zz' })
     check('wine order: same amount → the existing link back, marked reused', 'success' in wAgain && wAgain.reused === true && wAgain.checkoutUrl === 'https://pay.example.invalid/wl', JSON.stringify(wAgain))
+
+    // ── Part B2: language + the email guard (pure rules) ─────────────────────────
+    console.log('\nPart B2 — Flitt page language and the link-email guard\n')
+    check('winery default ka, admin language never set → Georgian page (the fallback used to be dead)', pickCheckoutLocale({ default_locale: 'ka' }) === 'ka')
+    check('admin language stored as en beats a ka winery default', pickCheckoutLocale({ admin_language: 'en', default_locale: 'ka' }) === 'en')
+    check('admin language ka → Georgian', pickCheckoutLocale({ admin_language: 'ka' }) === 'ka')
+    check('nothing stored → English', pickCheckoutLocale({}) === 'en')
+    const L = (age: number, ref: string, settled = false) => ({ settledAt: settled ? new Date() : null, createdAt: ago(age), flittOrderId: ref })
+    check('email guard: an open 7-day link may be emailed', linkEmailRefusal(L(1 * DAY, 'x-topup-7d-a-b'), 'CONFIRMED') === null)
+    check('email guard: a paid link may not', /already been paid/.test(linkEmailRefusal(L(1 * HOUR, 'x-topup-7d-a-b', true), 'CONFIRMED') ?? ''))
+    check('email guard: an expired link may not', /expired/.test(linkEmailRefusal(L(8 * DAY, 'x-topup-7d-a-b'), 'CONFIRMED') ?? ''))
+    check('email guard: an old-style link older than 10 h may not', /expired/.test(linkEmailRefusal(L(11 * HOUR, 'x-topup-a-b'), 'CONFIRMED') ?? ''))
+    check('email guard: a cancelled order may not', /cancelled/.test(linkEmailRefusal(L(1 * HOUR, 'x-topup-7d-a-b'), 'CANCELLED') ?? ''))
 
     // ── Part C ───────────────────────────────────────────────────────────────────
     console.log('\nPart C — reconcile window\n')

@@ -26,6 +26,9 @@ import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 /** Rows this module writes, as opposed to the gateway's own. */
 const MANUAL_PROVIDER = 'manual'
 
+/** One wording for "a cancelled order takes no payment" — card links, recorded top-ups, link emails. */
+export const CANCELLED_REFUSAL = 'This order is cancelled, so it cannot take a payment.'
+
 type OrderRef = { orderId?: string | null; wineOrderId?: string | null }
 
 /**
@@ -170,9 +173,10 @@ export async function recordAdditionalPayment(
 
   const order = await tx.order.findFirst({
     where: { id: input.orderId, tenantId: input.tenantId },
-    select: { totalPrice: true },
+    select: { totalPrice: true, stage: true },
   })
   if (!order) return { error: 'Order not found.' }
+  if (order.stage === 'CANCELLED') return { error: CANCELLED_REFUSAL }
 
   const settled = await tx.payment.aggregate({
     where: { orderId: input.orderId, settledAt: { not: null }, reversedAt: null },
@@ -239,6 +243,8 @@ export async function recordAdditionalWinePayment(
   if (input.amount <= 0) return { error: 'Enter an amount greater than zero.' }
   // Same row lock as recordAdditionalPayment above (F9).
   await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${input.wineOrderId} FOR UPDATE`
+  const wine = await tx.wineOrder.findFirst({ where: { id: input.wineOrderId, tenantId: input.tenantId }, select: { stage: true } })
+  if (wine?.stage === 'CANCELLED') return { error: CANCELLED_REFUSAL }
   const owed = await wineOrderBalance(tx, input)
   if ('error' in owed) return owed
   if (input.amount > owed.balance) {

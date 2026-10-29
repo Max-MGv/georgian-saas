@@ -53,7 +53,7 @@
 import { db } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 import { startCheckout } from '@/lib/payments/startCheckout'
-import { wineOrderBalance } from '@/lib/payments/manualPayment'
+import { wineOrderBalance, CANCELLED_REFUSAL } from '@/lib/payments/manualPayment'
 import {
   ADMIN_LINK_MARKER, ADMIN_LINK_LIFETIME_SECONDS, LINK_7D_TAG, adminLinkExpiresAt, findOpenAdminLink,
 } from '@/lib/payments/openLink'
@@ -81,7 +81,7 @@ export function mintTopUpFlittOrderId(orderId: string): string {
  * first", the same words Q-11 uses for Mark paid).
  */
 function linkRefusal(o: { stage: string; total: number | null }): string | null {
-  if (o.stage === 'CANCELLED') return 'This order is cancelled, so it cannot take a payment.'
+  if (o.stage === 'CANCELLED') return CANCELLED_REFUSAL
   if (o.total === null || o.total <= 0) return 'Set the price first.'
   return null
 }
@@ -121,8 +121,16 @@ export type StartTopUpCheckoutResult =
  * the link. Read from settings by tenant id — no request context is needed.
  */
 async function checkoutLocale(tenantId: string): Promise<'ka' | 'en'> {
-  const settings = await getAllSettings(tenantId)
-  const l = settingValue(settings, 'admin_language') || settingValue(settings, 'default_locale')
+  return pickCheckoutLocale(await getAllSettings(tenantId))
+}
+
+/**
+ * The choice itself, on the tenant's STORED settings. Looks at the stored `admin_language` only —
+ * `settingValue` would fall back to its built-in default 'en', which is always set, so the winery's
+ * own default language was never reached (found by the blind test, 2026-10-29).
+ */
+export function pickCheckoutLocale(stored: Record<string, string>): 'ka' | 'en' {
+  const l = stored['admin_language'] || settingValue(stored, 'default_locale')
   return l === 'ka' ? 'ka' : 'en'
 }
 
@@ -131,8 +139,8 @@ async function reuseOpenLink(
   ref: { orderId: string } | { wineOrderId: string },
   amount: number
 ): Promise<StartTopUpCheckoutResult | null> {
-  const open = await findOpenAdminLink(db, ref)
-  if (!open || open.amount !== amount) return null
+  const open = await findOpenAdminLink(db, ref, { amount })
+  if (!open) return null
   return { success: true, checkoutUrl: open.checkoutUrl, paymentId: open.id, expiresAt: open.expiresAt.toISOString(), reused: true }
 }
 

@@ -318,6 +318,29 @@ where it appears in each of the six pickers. Max's decisions recorded in §3 bef
 - **Resume point:** wait for Max's answers; record them in §3 (and with `tix decide`); then build **R2 UI** (Chunk 2 Q-11 block with the shared notice, Q-2 notice, Chunk 2b) and,
   after R2, Chunk 5 / 6 (the Card step). No UI code before the answers.
 
+### Blind test of Chunks 1–3 (2026-10-29) — a context-free subagent, fenced off from the vault / git / my tests
+Verified manual dev backup first (`2026-10-29_173824_dev_blind-tester-chunks-2-3`, every checksum matched). The tester read the payment code cold, wrote its own throwaway scripts
+against the DEV DB (3 scripts, 0 rows left, no Flitt or email calls), and reported. **Every claim below was checked against the code before being relied on.**
+- **Found sound (proved by running):** signature → amount → currency gates before any write; 3 concurrent approved callbacks → one settle; replay and cross-payment replay safe;
+  declined → processing → declined → approved settles; Delivered wine order gets `paidAt`, written once; the manual-ledger cases (first mark, again, un-pay, re-pay, partial card + mark paid
+  writes exactly the rest, raised total writes the difference); 7-day link open at 6.99 d / closed at 7.01 d, legacy untagged link = 10 h, declined/expired not open; money in tetri end to end.
+- **Real bugs in my Chunk 2/3 code — FIXED the same night** (`scripts/test-link-basics.ts` 30/30, `test-settle-stages.ts` 123/123, tsc + eslint clean):
+  1. Flitt page language fallback was dead code (`settingValue` always returns the built-in `'en'` for `admin_language`) → now reads the STORED setting first (`pickCheckoutLocale`), then the winery default.
+  2. "One open link": reuse only looked at the NEWEST open link, so A(5000), B(3000), ask 5000 again made a third link → `findOpenAdminLink(…, { amount })` finds any open link of that amount.
+  3. `sendOrderTopUpCheckoutEmail` would email a link that was already paid, expired or on a cancelled order → `linkEmailRefusal` guard.
+  4. `recordAdditionalPayment` / the wine twin accepted a Bank/Cash top-up on a CANCELLED order → refused (`CANCELLED_REFUSAL`, one wording).
+- **Verified real, NOT changed — need Max (each is in the T-318 decision list or its own ticket):**
+  - **Reconcile job sends no email** (pre-existing, on production) → KnownBugs #97 / **T-323**.
+  - **Settlement on a CANCELLED order still emails the guest "booking confirmed" and the winery "New paid booking"**, and **reopening** such an order leaves it Unpaid with a full ledger
+    (stage patches never touch `paidAt`) → KnownBugs #98; recommendation: skip those emails (the notice on board 5 + the flag carry it) and re-mark Paid on reopen when live payments cover the total.
+  - **Admin-link payment on an ABANDONED booking sends no email** (the comment "confirmed when made" is wrong for it) — consistent with Q-6 / Bank-Cash-from-Abandoned (also silent); fine unless Max wants a confirmation there.
+  - **Gateway refunds/reversals are never reflected; overpayment is silent; a different-amount link never retires an old one** — all already known and parked (§5, P-6); the proof sharpens why a refunds ticket should
+    come before Card links become routine (Chunk 5): after a Flitt-portal refund → un-pay → re-mark cash, the cash is not recorded because the refunded card row still counts as live.
+  - Minor, pre-existing: an `expired` gateway status is logged as PAYMENT_DECLINED; the return page shows `processing` as "failed"; the reconcile job only asks about `created` rows (documented in its header);
+    two concurrent "Card" clicks can mint two links (no lock); `recordTopUpPayment` on an UNPAID order leaves `paidAt` null (screens only offer it when paid); "Mark paid" on an unpriced order is Q-11 (held).
+- **Could not be determined by the tester:** whether Flitt keeps a declined checkout payable for retries; whether Flitt status responses are signed / keep the same `payment_id`; real concurrency of `startCheckout`.
+- **Lesson:** the tester found 4 real defects in code I had just verified myself with my own tests — my tests encoded my own assumptions (e.g. "settingValue falls back to the winery default"). Worth repeating a blind pass after the UI chunks and before each production merge.
+
 ### Chunk 5 — The Card step, booking order page (R3)
 - One shared client component (popup) built from `QrCodeDialog` + the existing link panel; the picker's
   third option opens it.

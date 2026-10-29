@@ -19,7 +19,7 @@
 import { db, withTenantDb } from '../lib/db'
 import { settlePayment } from '../lib/payments/settle'
 import { buildSignature } from '../lib/payments/flitt'
-import { recordManualPayment, reverseManualPayments } from '../lib/payments/manualPayment'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, recordAdditionalWinePayment } from '../lib/payments/manualPayment'
 import { startTopUpCheckout, startWineTopUpCheckout } from '../lib/payments/topUpCheckout'
 import { seedStageColumns } from '../lib/statusWrite'
 import { asTetri } from '../lib/money'
@@ -193,6 +193,14 @@ async function main() {
     check('wine: no price → "Set the price first."', errOf(await linkW(nw, 1000)) === 'Set the price first.')
     const uw = await makeOrder('wine', { stage: 'CONFIRMED' })
     check('wine: UNPAID + partial amount → must be the full amount', /full amount owed/.test(errOf(await linkW(uw, 5000))))
+
+    // Recording a Bank / Cash top-up on a cancelled order is refused too (blind test, 2026-10-29)
+    const topB = await withTenantDb(TENANT, tx => recordAdditionalPayment(tx, { orderId: cb, tenantId: TENANT, amount: asTetri(100), at: new Date(), method: 'CASH' }))
+    check('booking: a recorded top-up on a CANCELLED order is refused', 'error' in topB && /cancelled/i.test(topB.error), JSON.stringify(topB))
+    const topW = await withTenantDb(TENANT, tx => recordAdditionalWinePayment(tx, { wineOrderId: cw, tenantId: TENANT, amount: asTetri(100), at: new Date(), method: 'CASH' }))
+    check('wine: a recorded top-up on a CANCELLED order is refused', 'error' in topW && /cancelled/i.test(topW.error), JSON.stringify(topW))
+    const cbPayments = await db.payment.count({ where: { orderId: cb, provider: 'manual', method: 'CASH' } })
+    check('…and nothing was written for it', cbPayments === 0)
   } finally {
     await db.order.deleteMany({ where: { id: { in: orderIds } } })
     await db.wineOrder.deleteMany({ where: { id: { in: wineIds } } })

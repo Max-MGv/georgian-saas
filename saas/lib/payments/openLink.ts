@@ -64,8 +64,14 @@ export type OpenAdminLink = {
 export async function findOpenAdminLink(
   client: TxClient,
   ref: { orderId: string } | { wineOrderId: string },
-  now: Date = new Date()
+  opts: {
+    now?: Date
+    /** Only a link for exactly this amount (tetri). Reuse asks this way: with two open links of
+     *  different amounts, "the newest" is not necessarily the one being asked for. */
+    amount?: number
+  } = {}
 ): Promise<OpenAdminLink | null> {
+  const now = opts.now ?? new Date()
   const rows = await client.payment.findMany({
     where: {
       ...ref,
@@ -74,6 +80,7 @@ export async function findOpenAdminLink(
       settledAt: null,
       reversedAt: null,
       flittOrderId: { contains: ADMIN_LINK_MARKER },
+      ...(opts.amount !== undefined ? { amount: opts.amount } : {}),
       // coarse cut: nothing older than the longest lifetime can be open
       createdAt: { gt: new Date(now.getTime() - SEVEN_DAYS_MS) },
     },
@@ -85,6 +92,22 @@ export async function findOpenAdminLink(
     const expiresAt = adminLinkExpiresAt(r.createdAt, r.flittOrderId)
     if (expiresAt > now) return { id: r.id, amount: r.amount, checkoutUrl: r.checkoutUrl, createdAt: r.createdAt, expiresAt }
   }
+  return null
+}
+
+/**
+ * Why an existing admin link must not be emailed to the guest any more, or null when it still can be:
+ * the order was cancelled, the link was already paid, or it has expired (a dead link in an email
+ * is worse than none). Pure, so the rule is tested without a request.
+ */
+export function linkEmailRefusal(
+  link: { settledAt: Date | null; createdAt: Date; flittOrderId: string | null },
+  orderStage: string,
+  now: Date = new Date()
+): string | null {
+  if (orderStage === 'CANCELLED') return 'This order is cancelled, so it cannot take a payment.'
+  if (link.settledAt) return 'This link has already been paid.'
+  if (adminLinkExpiresAt(link.createdAt, link.flittOrderId) <= now) return 'This link has expired — make a new one.'
   return null
 }
 
