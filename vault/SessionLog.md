@@ -21,6 +21,13 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-29 (after midnight) — T-318 R2 pushed to staging; R3 (Card step, Chunks 5 + 6) BUILT + verified with real test-merchant payments (local, NOT pushed)
+
+- **Max: "yeah, if necessary have a sub-agent run some checks and then proceed."** Read as: push R2 to staging after a blind check, then continue. A context-free reviewer found real defects in R2 (row lock, race-safe revert, thrown actions, crafted payloads, email decided at settle) — all fixed, re-verified, **R2 pushed to `staging` (`6f77c78`; Vercel build READY)**. Not on production.
+- **R3:** Card step on the booking order page (`cd4dfd6`) and in every other picker (`b6c00bb`): shared `PaymentMethodChoices` / `PaymentMethodDialog` / `CardPaymentFor` / `CardPaymentPopup`; wine + Abandoned open a dialog instead of an inline strip. A Playwright script paid the links as the guest on Flitt's sandbox: the popup flipped to Paid by itself in the booking page, the list, wine and Abandoned. Details, the 5 bugs found while testing and the limits: plan "R3 — Chunks 5 + 6 results". Backups: `r3-card-popup-test`, `r3-chunk6-test` in `Downloads\DB_Backups`; all "ZZ R2" rows deleted; temporary env file / scratch pages removed.
+- **Process note:** an unrelated service worker (`regen-shell-v1`) on `localhost:3000` served stale JS to the Browser pane — unregister it if "my edit isn't showing" (ClaudeInstructions / playwright KNOWN-ISSUES candidate).
+- **Next:** read the R3 blind review, fix, push R3 to staging, Chunk 7 + 8. Max to decide: T-323 (reconcile cron email), the 0 ₾ "Send invoice", whether the paid-extras link should also use the popup.
+
 ## 2026-10-29 (night's end) — T-318 R2 UI BUILT + browser-verified (commits local, NOT pushed, NOT on production)
 
 - **Max: "as recommended"** to the whole Chunk 4 decisions board and to the cancelled-order question (no emails; notice + note; reopen re-marks Paid). Recorded on T-318 (both questions answered, one decide) and in the plan.

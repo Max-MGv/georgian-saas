@@ -44,8 +44,13 @@ export default function CardPaymentFor({ kind, id, locale, onPaid, onClose, onLi
         if (!inflight.current) {
           const p = kind === 'wine' ? startWineOrderCardPayment(id) : startOrderCardPayment(id)
           inflight.current = p
-          void p.then(r => { if ('success' in r) onLink?.({ amount: r.amount, expiresAt: r.expiresAt }) })
+          p.then(r => {
+            if ('success' in r) onLink?.({ amount: r.amount, expiresAt: r.expiresAt })
+            // A refusal / error must not be replayed to an immediate "Make a new link": forget it now.
+            else inflight.current = null
+          }, () => { inflight.current = null })
             .finally(() => { setTimeout(() => { inflight.current = null }, 1500) })
+            .catch(() => {})
         }
         return inflight.current
       }}

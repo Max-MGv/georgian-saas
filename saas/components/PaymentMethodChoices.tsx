@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { adminT } from '@/lib/adminT'
 import { asTetri, formatTetri } from '@/lib/money'
 import { formatLinkMoment } from '@/lib/formatLinkMoment'
@@ -41,18 +41,28 @@ export default function PaymentMethodChoices({ locale, getState, onRecord, onCar
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState(false)
+  // False once this picker is gone (cancelled, menu closed): a slow answer must not record money after that.
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
   const [warn, setWarn] = useState<{ method: Method; link: NonNullable<CardState['openLink']> } | null>(null)
 
   async function choose(method: Method) {
     setChecking(true)
+    setCheckError(false)
     let state: Awaited<ReturnType<typeof getState>> | null = null
     try { state = await getState() } catch { state = null }
+    if (!active.current) return
     setChecking(false)
-    if (state && !('error' in state)) {
-      onOpenLink?.(state.openLink)
-      if (state.paid) { onAlreadyPaid(); return }
-      if (state.openLink) { setWarn({ method, link: state.openLink }); return }
-    }
+    // Fail closed: if the open-link check itself failed we do NOT record — that check is what prevents a
+    // double charge. The admin sees why and can simply try again.
+    if (!state || 'error' in state) { setCheckError(true); return }
+    onOpenLink?.(state.openLink)
+    if (state.paid) { onAlreadyPaid(); return }
+    if (state.openLink) { setWarn({ method, link: state.openLink }); return }
     onRecord(method)
   }
 
@@ -61,6 +71,9 @@ export default function PaymentMethodChoices({ locale, getState, onRecord, onCar
   return (
     <div className={className ?? 'px-3 py-2'} style={{ minWidth: 220, maxWidth: 'min(86vw, 300px)' }}>
       <p className="text-xs mb-1.5" style={{ color: MUTED }}>{at('paymentMethod.howPaid')}</p>
+      {checkError && !warn && (
+        <p role="alert" className="text-xs rounded-md px-2 py-1.5 mb-1.5" style={{ backgroundColor: '#fdecea', border: '1px solid #f0b4ae', color: '#8a1c16' }}>{at('paymentMethod.checkFailed')}</p>
+      )}
       {warn ? (
         <div className="flex flex-col gap-1.5">
           <p role="alert" className="text-xs rounded-md px-2 py-1.5" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05' }}>

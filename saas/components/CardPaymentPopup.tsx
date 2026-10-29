@@ -114,8 +114,10 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
   useEffect(() => {
     if (phase !== 'waiting' || !link) return
     let stopped = false
+    let busy = false // a slow answer must not be overtaken by the next tick
     const tick = async () => {
-      if (stopped || document.hidden) return
+      if (stopped || document.hidden || busy) return
+      busy = true
       try {
         if (await isPaidRef.current()) {
           if (stopped || !alive.current) return
@@ -124,6 +126,8 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
         }
       } catch {
         // A dropped request is not an answer — try again next tick.
+      } finally {
+        busy = false
       }
     }
     const timer = setInterval(tick, POLL_MS)
@@ -156,6 +160,16 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
     setMailState('sent')
   }
 
+  /** Close — after one last look: a payment that landed in the last seconds must still update the page behind. */
+  async function close() {
+    if (phase === 'waiting' || phase === 'expired') {
+      try {
+        if (!paidReported.current && (await isPaidRef.current())) { paidReported.current = true; onPaidRef.current() }
+      } catch { /* nothing to report */ }
+    }
+    onClose()
+  }
+
   const money = link ? formatTetri(asTetri(link.amount)) : ''
   const border = '1px solid var(--site-border)'
   const btn = { border, color: 'var(--site-text)' } as const
@@ -164,7 +178,7 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
   const btnH = { minHeight: 40 } as const
 
   return (
-    <Dialog.Root open onOpenChange={o => { if (!o) onClose() }}>
+    <Dialog.Root open onOpenChange={o => { if (!o) void close() }}>
       <Dialog.Portal>
         <Dialog.Backdrop style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)' }} />
         <Dialog.Popup
@@ -181,7 +195,7 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
               <Dialog.Description className="text-xs mb-4" style={{ color: 'var(--site-secondary)' }}>
                 {at(subject === 'wine' ? 'cardPay.paidBody.wine' : 'cardPay.paidBody.booking', { amount: money })}
               </Dialog.Description>
-              <button onClick={onClose} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.done')}</button>
+              <button onClick={() => void close()} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.done')}</button>
             </>
           ) : (
             <>
@@ -198,7 +212,7 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
                   </Dialog.Description>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
                     <button onClick={begin} className={btnClass} style={{ ...btn, ...btnH }}>{at('cardPay.newLink')}</button>
-                    <button onClick={onClose} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
+                    <button onClick={() => void close()} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
                   </div>
                 </>
               )}
@@ -252,13 +266,13 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
                       {mailError && <p role="alert" className="text-xs mb-2" style={{ color: '#8a1c16' }}>{mailError}</p>}
                       <div className="flex items-center justify-center gap-2 flex-wrap">
                         <a href={link.checkoutUrl} target="_blank" rel="noopener noreferrer" className={`${btnClass} inline-flex items-center`} style={{ ...btn, ...btnH }}>{at('cardPay.open')}</a>
-                        <button onClick={onClose} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
+                        <button onClick={() => void close()} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
                       </div>
                     </>
                   ) : (
                     <div className="flex items-center justify-center gap-2 flex-wrap">
                       <button onClick={begin} className={btnClass} style={{ ...btn, ...btnH }}>{at('cardPay.newLink')}</button>
-                      <button onClick={onClose} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
+                      <button onClick={() => void close()} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.close')}</button>
                     </div>
                   )}
                 </>

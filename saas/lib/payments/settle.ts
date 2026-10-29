@@ -4,6 +4,8 @@ import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
 import { isAdminLinkPayment } from '@/lib/payments/openLink'
+import { livePaidSum } from '@/lib/payments/manualPayment'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
@@ -270,12 +272,28 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // `updateMany` again and silently moved `paidAt` forward on every settlement. With it, `paidAt`
     // is written exactly once; the second `Payment` row still settles normally (idempotency gate
     // above) — only the order's own first-paid time is protected.
-    if (payment.orderId) {
+    // An ADMIN card link (T-318) is for a fixed amount made at one moment; the price may have changed since
+    // (an extra added, a guest removed, a delivery fee set) while the link stayed payable — a link cannot be
+    // cancelled. So that money marks the order Paid only when everything on the ledger now covers the total;
+    // otherwise it is recorded (the Payment row settled above) and the order stays unpaid with a balance, which
+    // Bank / Cash / a new link then complete. The guest's own checkout is always for the full price, as before.
+    let coversTotal = true
+    if (isAdminLinkPayment(payment.flittOrderId)) {
+      if (payment.orderId) {
+        const o = await tx.order.findUnique({ where: { id: payment.orderId }, select: { totalPrice: true } })
+        coversTotal = o?.totalPrice != null && (await livePaidSum(tx, { orderId: payment.orderId })) >= o.totalPrice
+      } else if (payment.wineOrderId) {
+        const w = await tx.wineOrder.findUnique({ where: { id: payment.wineOrderId }, select: { totalAmount: true, deliveryFee: true } })
+        const due = w ? wineOrderAmountDue(w) : null
+        coversTotal = due != null && (await livePaidSum(tx, { wineOrderId: payment.wineOrderId })) >= due
+      }
+    }
+    if (coversTotal && payment.orderId) {
       await tx.order.updateMany({
         where: { id: payment.orderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,
       })
-    } else if (payment.wineOrderId) {
+    } else if (coversTotal && payment.wineOrderId) {
       await tx.wineOrder.updateMany({
         where: { id: payment.wineOrderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,

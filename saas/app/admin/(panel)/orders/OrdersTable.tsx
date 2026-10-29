@@ -1405,12 +1405,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const vh = window.innerHeight
         // Phone (T-319): finger-sized rows (44px) and a wider menu; desktop keeps its compact 33px rows.
         const phone = vw < 768
-        const menuW = phone ? 180 : 140
+        // The "How was this paid?" picker (Bank / Cash / Card, and its open-link warning) is wider and taller than the plain step list.
+        const choosing = payingOrderId === order.id
+        const menuW = choosing ? 260 : phone ? 180 : 140
         const rowH = phone ? 44 : 33
         const steps = menuSteps(order)
         const choosingPayment = payingOrderId === order.id
-        const menuH = choosingPayment ? (phone ? 170 : 110) : steps.length * rowH + 8
-        const left = Math.min(statusMenuRect.left, vw - menuW - 8)
+        const menuH = choosingPayment ? 290 : steps.length * rowH + 8
+        const left = Math.max(8, Math.min(statusMenuRect.left, vw - menuW - 8))
         const top = statusMenuRect.bottom + 4 + menuH > vh
           ? Math.max(statusMenuRect.top - menuH - 4, 8)
           : statusMenuRect.bottom + 4
@@ -1418,7 +1420,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <div
             className="rounded-lg shadow-lg border py-1"
             data-status-menu
-            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
+            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, maxHeight: vh - 16, overflowY: 'auto', backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
             {choosingPayment ? (
