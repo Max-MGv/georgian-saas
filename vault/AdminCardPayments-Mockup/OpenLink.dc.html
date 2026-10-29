@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bank or Cash while a link is open</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 820px; height: 760px">
+  <h1 class="t1">2 · Bank or Cash while a link is still open</h1>
+  <p class="sub">Flitt cannot cancel a link — it can only let it expire (7 days). If an admin records Cash while the link is open, the guest could still pay it and be charged twice. So the menu warns <b>before</b> recording, and the status pill shows that a link is waiting (same idea as today’s “Invoice sent” mark).</p>
+
+  <p class="cap"><span class="tag">EN</span>On the status pill</p>
+  <div class="win" style="width: 360px; margin-bottom: 18px">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <span class="pill unpaid">Unpaid ▾</span>
+      <span class="pill inv">Card link open · until 5 Nov</span>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span>Choosing Cash</p>
+      <div class="menu w">
+        <p class="q">How was this paid?</p>
+        <div class="nt warn" style="margin: 4px 12px 6px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>A card link for <b>₾250.00</b> is still open until <b>5 Nov 2026, 14:30</b>. If the guest pays it too they will be charged twice — a link can’t be cancelled.</span>
+        </div>
+        <button class="mb">Record cash anyway</button>
+        <button class="mb out">Card<small>Show the open link again</small></button>
+        <button class="mb ghost">Back</button>
+      </div>
+      <p class="note">“Card” here reopens the <b>same</b> link (one open link per order) instead of making a second one.</p>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">KA</span>ნაღდი ფულის არჩევა</p>
+      <div class="menu w">
+        <p class="q">როგორ გადაიხადა?</p>
+        <div class="nt warn" style="margin: 4px 12px 6px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>ბარათით გადახდის ბმული <b>₾250.00</b>-ზე ჯერ კიდევ ღიაა <b>5 ნოემბრამდე, 14:30</b>. თუ სტუმარი მასაც გადაიხდის, ორჯერ ჩამოეჭრება — ბმულის გაუქმება შეუძლებელია.</span>
+        </div>
+        <button class="mb">მაინც ნაღდით აღრიცხვა</button>
+        <button class="mb out">ბარათი<small>ღია ბმულის ხელახლა ჩვენება</small></button>
+        <button class="mb ghost">უკან</button>
+      </div>
+      <p class="note">ქართული ტექსტი — სამუშაო ვარიანტი.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":820,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

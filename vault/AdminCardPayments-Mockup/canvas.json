@@ -1,0 +1,38 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-29T14:10:00Z" },
+  "title": "Card payments mockup",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1020, "h": 760, "title": "1 · The picker" },
+    "OpenLink.dc.html": { "x": 1100, "y": 0, "w": 820, "h": 760, "title": "2 · Bank / Cash while a link is open" },
+    "CardPopup.dc.html": { "x": 0, "y": 880, "w": 1500, "h": 1800, "title": "3 · The Card popup — desktop" },
+    "CardPhone.dc.html": { "x": 0, "y": 2800, "w": 1680, "h": 960, "title": "4 · The Card popup — phone (375 px)" },
+    "Cancelled.dc.html": { "x": 0, "y": 3880, "w": 1160, "h": 820, "title": "5 · Card money on a cancelled order" },
+    "Price.dc.html": { "x": 1240, "y": 3880, "w": 1160, "h": 820, "title": "6 · “Set the price first”" },
+    "NothingToPay.dc.html": { "x": 0, "y": 4820, "w": 1100, "h": 760, "title": "7 · “Nothing to pay”" },
+    "Where.dc.html": { "x": 1180, "y": 4820, "w": 1100, "h": 760, "title": "8 · Where it appears" },
+    "Decisions.dc.html": { "x": 0, "y": 5700, "w": 1100, "h": 1200, "title": "9 · Decisions for you" }
+  },
+  "order": [
+    "Main.dc.html",
+    "OpenLink.dc.html",
+    "CardPopup.dc.html",
+    "CardPhone.dc.html",
+    "Cancelled.dc.html",
+    "Price.dc.html",
+    "NothingToPay.dc.html",
+    "Where.dc.html",
+    "Decisions.dc.html"
+  ],
+  "notes": {
+    "title": { "x": 0, "y": -300, "text": "Card payments — admin mockup (T-318, Chunk 4)", "kind": "title1", "maxW": 1920 },
+    "how": {
+      "x": 0, "y": -150, "w": 560,
+      "text": "Static comps of the real admin look (wine + cream, the existing status menu and QR dialog). English and Georgian side by side; Georgian wording is a draft. Nothing here is built yet. Decisions are on the last board.",
+      "fill": "gray"
+    }
+  },
+  "designSystems": []
+}

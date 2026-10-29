@@ -29,7 +29,7 @@ tags: [plan, payments, flitt, orders, wine-orders, active]
 | 2 | Settlement rules: card money marks Confirmed/Completed orders Paid; cancelled → flagged | R2 | 🚧 **backend built + verified on localhost (commit local, not pushed)**; Q-11 block + Q-2 warning wait for Max's decision (see §7 Chunk 2 "Result") |
 | 2b | "Nothing to pay" state for 0 ₾ bookings (Q-12) | R2 | 📋 |
 | 3 | Link basics: 7-day lifetime, Georgian checkout, "open link" awareness, reconcile window | R2 | ✅ **backend built + verified on localhost incl. the real Flitt test merchant (commit local, not pushed)** — the "open link" warning/"valid until" display is UI → Chunk 4/5 |
-| 4 | Mockup of the third option (all pickers, desktop + phone, EN + KA) → Max decides | — | 📋 |
+| 4 | Mockup of the third option (all pickers, desktop + phone, EN + KA) → Max decides | — | 🚧 **mockup published 2026-10-29 (9 boards) — waiting for Max's decisions 1–8 (last board)**; source in `vault/AdminCardPayments-Mockup/` |
 | 5 | Shared "Card" step: link + QR + live "Paid ✓", in the booking order page picker | R3 | 📋 |
 | 6 | Same step in the other pickers: bookings list, phone card, Abandoned, wine orders | R3 | 📋 |
 | 7 | Verification: tier 5 Flitt staging, E2E 1–4, blind review, hand-over | — | 📋 |
@@ -301,6 +301,22 @@ in `sendSettlementEmail`).
 Desktop + 375 px, EN + KA: the picker with three options; the Card popup (amount, QR, Copy, Email,
 "Waiting…", "valid until", "Paid ✓", open-link and expired states); the Cash-while-link-open warning;
 where it appears in each of the six pickers. Max's decisions recorded in §3 before Chunk 5.
+
+**Result (2026-10-29, late night) — mockup published, decisions pending.**
+- **Where:** Artifact `https://claude.ai/artifact/JaEfD566pctq5M1Drdg2Ua` (private, Design canvas, 9 boards); **source files** in `vault/AdminCardPayments-Mockup/`
+  (`canvas.json`, `mock.css`, one `.dc.html` per board) — to change it, edit those and re-publish to the same URL, do not rebuild. Linked on T-318, with one
+  open question there (`tix ask`: Card button style A or B).
+- **Boards:** 1 picker (today / A same green / **B outlined + hint, recommended**, EN + KA) · 2 Bank/Cash while a link is open (warning + "link open" pill mark) ·
+  3 Card popup desktop (waiting / paid / already open / expired, EN + KA; wine variant with "fee not set", no Email) · 4 popup at 375 px (waiting + paid, EN + KA) ·
+  5 cancelled-order notice (Q-2) · 6 "Set the price first" notice (Q-11) · 7 "Nothing to pay" (Chunk 2b) · 8 where Card appears (six pickers) · 9 decisions 1–8 with recommendations.
+- **Look:** built from the real admin vocabulary read from the code (status-menu popup, green method buttons, `QrCodeDialog`, link panel buttons, adminT wording);
+  placeholder QR (not scannable); sample names/amounts. Green is a slightly darker shade than the app's `#16a34a` so white text passes contrast — the build reuses the existing component colours.
+- **Not done / honest limits:** the canvas was **not opened or rendered by me** (the Design type says not to verify unless asked) — layout may need a nudge. Phone sizes are drawn,
+  not measured; the real 375 px pass (Rule 12.2) happens on the build. All Georgian is Claude's draft (decision 7).
+- **Decisions waiting (board 9):** 1 Card style (A/B, rec. B) · 2 popup · 3 Bank/Cash warning · 4 cancelled notice · 5 price notice · 6 Nothing to pay · 7 Georgian wording ·
+  8 release order (R1 T-321 → R2 settlement + notices + Nothing to pay + link basics → R3 Card everywhere).
+- **Resume point:** wait for Max's answers; record them in §3 (and with `tix decide`); then build **R2 UI** (Chunk 2 Q-11 block with the shared notice, Q-2 notice, Chunk 2b) and,
+  after R2, Chunk 5 / 6 (the Card step). No UI code before the answers.
 
 ### Chunk 5 — The Card step, booking order page (R3)
 - One shared client component (popup) built from `QrCodeDialog` + the existing link panel; the picker's

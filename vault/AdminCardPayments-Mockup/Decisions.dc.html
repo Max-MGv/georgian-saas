@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Decisions for you</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1100px; height: 1200px">
+  <h1 class="t1">9 · Decisions for you</h1>
+  <p class="sub">Nothing is built until you answer. Reply in chat in any form — for example “1 B, 2–8 as recommended, 7 change …”. Each item says what I recommend and what changes if you pick otherwise.</p>
+
+  <div class="dec">
+    <h3>1 · How “Card” looks in the menu (board 1) <span class="tag rec">Recommend B</span></h3>
+    <p><b>B</b> — outlined, with “Guest pays now — link or QR”. Bank and Cash record money already received; Card only <i>asks</i>, so it should not look like a third “done” button. <b>A</b> (same green) is simpler but invites the wrong click.</p>
+  </div>
+  <div class="dec">
+    <h3>2 · The popup (boards 3 and 4) <span class="tag rec">Recommend as shown</span></h3>
+    <p>Full amount owed, not editable; QR + Copy + Email + Open; “valid until”; switches to <b>Paid</b> by itself within seconds of Flitt confirming; closing it cancels nothing. Email appears only when the booking has an email address; none on wine orders for now (T-322).</p>
+  </div>
+  <div class="dec">
+    <h3>3 · Bank / Cash while a link is open (board 2) <span class="tag rec">Recommend as shown</span></h3>
+    <p>Warn first and make you confirm (“Record cash anyway”); “Card” there reopens the same link. A pill mark shows a link is waiting. <b>Alternative:</b> only the pill mark, no warning — less in the way, but the double-charge risk is then silent.</p>
+  </div>
+  <div class="dec">
+    <h3>4 · Card money on a cancelled order (board 5) <span class="tag rec">Recommend as shown</span></h3>
+    <p>An amber notice on the order page and the wine card only, worked out from the payments (so it also works for old orders). <b>Not</b> in the lists. Ships together with the settlement rule — otherwise late money is recorded and invisible.</p>
+  </div>
+  <div class="dec">
+    <h3>5 · “Set the price first” (board 6) <span class="tag rec">Recommend as shown</span></h3>
+    <p>One shared red, dismissible notice; the pill snaps back; same notice for errors that are swallowed today. <b>Not proposed (say so if you want it):</b> greying out Bank / Cash / Card in advance when there is no price.</p>
+  </div>
+  <div class="dec">
+    <h3>6 · “Nothing to pay” (board 7) <span class="tag rec">Recommend as shown</span></h3>
+    <p>Grey pill, a fourth payment category outside Unpaid / Invoice sent / Paid, no Paid or Invoice step in its menu; old 0 ₾ bookings already marked Paid stay Paid.</p>
+  </div>
+  <div class="dec">
+    <h3>7 · Georgian wording <span class="tag">Needs your eye</span></h3>
+    <p>Every Georgian line here is my draft, not reviewed by a native speaker. Reused app wording is untouched (ბარათი, გადახდილი, …); the new sentences are the ones to read — especially “გადასახდელი არ არის” and the double-charge warning.</p>
+  </div>
+  <div class="dec">
+    <h3>8 · Order of building and shipping <span class="tag rec">Recommend</span></h3>
+    <p><b>R1</b> = T-321 (already on staging; ships alone on your go). <b>R2</b> = settlement rules + the two notices (boards 5, 6) + “Nothing to pay” + link basics — nothing new to click except the notices. <b>R3</b> = the Card step in every place (boards 1–4, 8). Each is its own release with its own release note and screenshots; each needs your explicit go before production.</p>
+  </div>
+  <div class="dec">
+    <h3>Not decided here, and not in this plan</h3>
+    <p>Refunds (Flitt’s portal only, for now) and “charge any amount not tied to an order” (needs a new table) — both parked as agreed.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

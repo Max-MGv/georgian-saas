@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Where it appears</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1100px; height: 760px">
+  <h1 class="t1">8 · Where “Card” appears</h1>
+  <p class="sub">Every place an admin takes money gets the same third answer and opens the same popup. It is one shared piece of code, not six copies — so the desktop and phone halves, and wine orders, cannot drift apart. (Placement list checked against the code on 29 Oct 2026.)</p>
+
+  <table class="tbl">
+    <thead>
+      <tr><th style="width: 24%">Place</th><th style="width: 24%">Today</th><th style="width: 26%">After</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>Booking order page</b><br>status pill menu</td><td>Bank transfer · Cash</td><td>+ <b>Card</b> → popup</td><td>Order must have a price and not be cancelled.</td></tr>
+      <tr><td><b>Bookings list</b><br>desktop status menu</td><td>Bank transfer · Cash</td><td>+ <b>Card</b> → popup</td><td>Popup opens over the list.</td></tr>
+      <tr><td><b>Bookings list, phone</b><br>card status pill</td><td>Bank transfer · Cash</td><td>+ <b>Card</b> → popup</td><td>The pill menu added on 29 Oct; same menu.</td></tr>
+      <tr><td><b>Abandoned</b><br>“Mark paid” on a row</td><td>Bank transfer · Cash</td><td>+ <b>Card</b> → popup</td><td>When paid it leaves Abandoned and becomes a normal Paid booking. The guest’s own old checkout may still be open for up to 10 h (small double-pay risk — the warning on board 2 covers admin links only).</td></tr>
+      <tr><td><b>Wine orders</b><br>desktop, phone and flow-line pickers</td><td>Bank transfer · Cash</td><td>+ <b>Card</b> → popup (Copy + QR, no Email)</td><td>Amount = wines + delivery fee. Fee “to be set” → charges the wines only (board 3). Pickup orders included.</td></tr>
+      <tr><td><b>Already-paid booking that owes extras</b><br>Total card</td><td>“Send card-payment link” → amount box → Copy / QR / Email</td><td>Unchanged, but opens in the <b>same popup</b></td><td>Amount stays editable (up to what is owed) — the one place it is.</td></tr>
+      <tr><td><b>Paid wine order that owes a delivery fee</b></td><td>Copy / QR link</td><td>Unchanged, same popup</td><td>No Email for now.</td></tr>
+      <tr><td><b>Not offered</b></td><td colspan="2">Cancelled orders · orders with no price or 0 ₾</td><td>Server refuses too, not only a hidden button.</td></tr>
+    </tbody>
+  </table>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

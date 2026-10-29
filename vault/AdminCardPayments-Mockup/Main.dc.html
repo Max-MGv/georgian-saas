@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The picker</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1020px; height: 760px">
+  <h1 class="t1">1 · The picker — Card becomes the third answer</h1>
+  <p class="sub">“How was this paid?” offers Bank transfer and Cash today, and both record money that has <b>already arrived</b>. Card is different: it asks the guest to pay, and the order only turns Paid when Flitt confirms. So it should not look like the other two. The same menu appears wherever an admin marks something paid.</p>
+
+  <p class="cap"><span class="tag">EN</span>English</p>
+  <div class="cols">
+    <div class="col">
+      <p class="cap">Today</p>
+      <div class="menu">
+        <p class="q">How was this paid?</p>
+        <button class="mb">Bank transfer</button>
+        <button class="mb">Cash</button>
+        <button class="mb ghost">Cancel</button>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">Option A · same green</p>
+      <div class="menu">
+        <p class="q">How was this paid?</p>
+        <button class="mb">Bank transfer</button>
+        <button class="mb">Cash</button>
+        <button class="mb">Card</button>
+        <button class="mb ghost">Cancel</button>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap"><span class="tag rec">Recommended</span>Option B · outlined, says what happens</p>
+      <div class="menu">
+        <p class="q">How was this paid?</p>
+        <button class="mb">Bank transfer</button>
+        <button class="mb">Cash</button>
+        <button class="mb out">Card<small>Guest pays now — link or QR</small></button>
+        <button class="mb ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <p class="cap"><span class="tag">KA</span>ქართული (draft wording)</p>
+  <div class="cols">
+    <div class="col">
+      <p class="cap">დღეს</p>
+      <div class="menu">
+        <p class="q">როგორ გადაიხადა?</p>
+        <button class="mb">საბანკო გადარიცხვა</button>
+        <button class="mb">ნაღდი ფული</button>
+        <button class="mb ghost">გაუქმება</button>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">ვარიანტი A</p>
+      <div class="menu">
+        <p class="q">როგორ გადაიხადა?</p>
+        <button class="mb">საბანკო გადარიცხვა</button>
+        <button class="mb">ნაღდი ფული</button>
+        <button class="mb">ბარათი</button>
+        <button class="mb ghost">გაუქმება</button>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">ვარიანტი B (რეკომენდებული)</p>
+      <div class="menu">
+        <p class="q">როგორ გადაიხადა?</p>
+        <button class="mb">საბანკო გადარიცხვა</button>
+        <button class="mb">ნაღდი ფული</button>
+        <button class="mb out">ბარათი<small>სტუმარი ახლა იხდის — ბმული ან QR</small></button>
+        <button class="mb ghost">გაუქმება</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1020,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

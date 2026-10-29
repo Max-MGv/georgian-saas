@@ -21,6 +21,12 @@ Most recent 2 sessions in full detail. Older entries compressed to one line.
 
 ---
 
+## 2026-10-29 (very late) — T-318 Chunk 4 MOCKUP published; blind tester running on Chunks 1–3
+
+- **Max: "test these chunks via a blind tester and proceed to the next chunk; testing can also be via browser, whatever you recommend".** Recommendation taken: a **context-free subagent** (fenced off from `vault/`, `.claude/`, git history and my `test-*` scripts; allowed to write its own throwaway scripts in the scratchpad against the DEV DB only, no production, no repo edits) because Chunks 2–3 have no screens; the browser was used where it could prove something (the Flitt checkout page: Georgian + the 60-s link expiry). A **verified manual dev backup** was taken first (`Downloads\DB_Backups\2026-10-29_173824_dev_blind-tester-chunks-2-3`). Its report arrives by notification — **results not in yet when this was written**; every claim must be checked against the code before being relayed (feedback_blind_reviews).
+- **Chunk 4 (mockup):** published as a private Design canvas, 9 boards (picker A/B, popup desktop + phone, open-link warning, cancelled-order notice, price notice, Nothing to pay, where it appears, decisions). URL + source: plan §7 Chunk 4 "Result"; source in `vault/AdminCardPayments-Mockup/`. One open question posted on T-318 (`tix ask`: Card style A/B). **No UI code until Max answers.**
+- **Next:** Max's decisions → record on T-318 → R2 UI (Q-11 block + notice, Q-2 notice, Nothing to pay) → R3 Card step.
+
 ## 2026-10-29 (late night) — T-318 Chunk 3 BACKEND built + verified incl. the real Flitt test merchant (commit local, NOT pushed, NOT on production)
 
 - **Max: "proceed, but record this on the ticket"** (approving my recommendations on Q-11 / Q-2 / order of work) → the three decisions + progress + commit links are on **T-318** (`tix decide`, `tix solution`, `tix link`) for his later review. Then Chunk 3 of [[Plan-AdminCardPayments]]: admin links ask Flitt for **7 days**, tagged `-topup-7d-` so the lifetime is read back without a migration (old links = 10 h); Flitt checkout in the admin's language; **one open link per order** (same amount → same link); reconcile job follows admin links 9 days; wine "link waiting" ignores expired links. New leaf module `lib/payments/openLink.ts`.

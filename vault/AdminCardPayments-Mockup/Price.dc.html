@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set the price first</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1160px; height: 820px">
+  <h1 class="t1">6 · “Set the price first” — when marking paid is refused</h1>
+  <p class="sub">A booking with no price (or 0 ₾) cannot be marked Paid by any method — Bank, Cash or Card — and the server refuses it. Today the screens swallow that kind of refusal and keep showing “Paid” until a refresh. The fix is one shared notice in the admin’s existing red style: the pill snaps back to what it was and the reason is written out. Dismissible; it also covers the errors that fail silently today (“Order not found”, “Failed to update status”).</p>
+
+  <div class="cols">
+    <div class="col" style="width: 700px">
+      <p class="cap"><span class="tag">EN</span>Orders list (desktop)</p>
+      <div class="win" style="padding: 12px">
+        <div class="nt err" role="alert" style="margin-bottom: 8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/></svg>
+          <span><b>Set the price first.</b> Giorgi Beridze has no price yet, so this booking can’t be marked paid.</span>
+          <button class="x">Dismiss</button>
+        </div>
+        <div class="rw"><span class="nm">Giorgi Beridze<br><span class="sm">12 Nov 2026 · 13:00</span></span><span class="pill unpaid">Unpaid ▾</span><span class="muted">no price</span></div>
+        <div class="rw"><span class="nm">Nino Kapanadze<br><span class="sm">13 Nov 2026 · 15:00</span></span><span class="pill paid">Paid ▾</span><b>₾480.00</b></div>
+        <div class="rw"><span class="nm">Levan Gogia<br><span class="sm">14 Nov 2026 · 12:00</span></span><span class="pill inv">Invoice sent ▾</span><b>₾320.00</b></div>
+      </div>
+
+      <p class="cap" style="margin-top:14px"><span class="tag">KA</span>შეკვეთების სია</p>
+      <div class="win" style="padding: 12px">
+        <div class="nt err" role="alert" style="margin-bottom: 8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/></svg>
+          <span><b>ჯერ დააყენეთ ფასი.</b> გიორგი ბერიძეს ფასი ჯერ არ აქვს, ამიტომ ჯავშანი გადახდილად ვერ აღინიშნება.</span>
+          <button class="x">დახურვა</button>
+        </div>
+        <div class="rw"><span class="nm">გიორგი ბერიძე<br><span class="sm">12 ნოემ. 2026 · 13:00</span></span><span class="pill unpaid">გადაუხდელი ▾</span><span class="muted">ფასი არ არის</span></div>
+        <div class="rw"><span class="nm">ნინო კაპანაძე<br><span class="sm">13 ნოემ. 2026 · 15:00</span></span><span class="pill paid">გადახდილი ▾</span><b>₾480.00</b></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span>Phone</p>
+      <div class="phone" style="height: 600px">
+        <div class="nt err" role="alert" style="margin-bottom: 8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5h.01"/></svg>
+          <span><b>Set the price first.</b> Giorgi Beridze has no price yet, so this booking can’t be marked paid.</span>
+          <button class="x">Dismiss</button>
+        </div>
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">Giorgi Beridze</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 Nov 2026 · 13:00 · 4 guests</p>
+          <span class="pill unpaid">Unpaid ▾</span>
+        </div>
+        <div class="scr" style="margin-top:8px">
+          <p style="margin:0 0 2px; font-weight:700">Nino Kapanadze</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">13 Nov 2026 · 15:00 · 2 guests</p>
+          <span class="pill paid">Paid ▾</span>
+        </div>
+      </div>
+      <p class="note" style="margin-top:8px">On the order page the same notice sits above the status flow-line. Which orders are affected: total not set, or exactly 0 ₾. A genuinely free booking shows “Nothing to pay” instead (board 7).</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1160,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
