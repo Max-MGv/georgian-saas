@@ -35,6 +35,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
+import { bookingMoneyRefusal, type StatusChangeResult } from '@/lib/statusRefusal'
 import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
 
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
@@ -987,7 +988,7 @@ function toCurrentDates(o: {
 export async function changeBookingStatus(
   orderId: string,
   change: BookingStatusChange
-): Promise<{ success: true } | { error: string }> {
+): Promise<StatusChangeResult> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
@@ -1011,6 +1012,11 @@ export async function changeBookingStatus(
         select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
+      // Q-11 / Q-12: no price, or a genuinely free booking, cannot be marked paid or
+      // invoiced by any method. Checked on the server before any write — a hidden
+      // button is not a rule.
+      const refusal = bookingMoneyRefusal(current.totalPrice, change)
+      if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = toCurrentDates(current)
       const data =
@@ -1049,6 +1055,7 @@ export async function changeBookingStatus(
       }
       return updated
     })
+    if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
     revalidatePath(`/admin/orders/${orderId}`)

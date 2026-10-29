@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { changeBookingStatus } from '@/app/actions/orders'
 import { changeWineOrderStatus } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -152,8 +153,9 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
   // "Paid" step everywhere else already asks the same question).
   const [pickingId, setPickingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const statusNotice = useStatusNotice()
 
-  const rows = kind === 'bookings' ? bookings : wineOrders
+  const rows =kind === 'bookings' ? bookings : wineOrders
   const visible = rows.filter(r => !done.has(r.id))
 
   function restore(id: string, paid: boolean, method?: 'BANK_TRANSFER' | 'CASH') {
@@ -166,14 +168,19 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
       // `abandonedAt`, which the database requires anyway — a paid order that
       // stayed abandoned would fail the `*_abandoned_is_unpaid` constraint.
       const change = paid ? { kind: 'paid' as const, value: true, method } : { kind: 'restore' as const }
-      if (kind === 'bookings') await changeBookingStatus(id, change)
-      else await changeWineOrderStatus(id, change)
+      const result = kind === 'bookings' ? await changeBookingStatus(id, change) : await changeWineOrderStatus(id, change)
+      // T-318: a refused change (no price) must not look done — bring the row back and say why.
+      const who = rows.find(r => r.id === id)?.who
+      if (statusNotice.report(result, kind === 'bookings' ? 'booking' : 'wine', who)) {
+        setDone(prev => { const n = new Set(prev); n.delete(id); return n })
+      }
       router.refresh()
     })
   }
 
   return (
     <div>
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-4" />
       <div className="flex gap-2 mb-4">
         <Tab label={at('abandoned.tab.bookings')} count={bookings.length}
           active={kind === 'bookings'} onClick={() => setKind('bookings')} />

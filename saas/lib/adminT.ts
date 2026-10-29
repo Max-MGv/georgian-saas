@@ -399,6 +399,16 @@ const en: Translations = {
   'paymentMethod.card': 'Card',
   'paymentMethod.manual': 'Marked paid',
 
+  // T-318 — one shared notice when a status change is refused (Q-11 / Q-12) or fails
+  'statusNotice.dismiss': 'Dismiss',
+  'statusNotice.noPrice.title': 'Set the price first.',
+  'statusNotice.noPrice.booking': 'This booking{who} has no price yet, so it can’t be marked paid.',
+  'statusNotice.noPrice.wine': 'This wine order{who} has no price yet, so it can’t be marked paid.',
+  'statusNotice.nothingToPay.title': 'Nothing to pay.',
+  'statusNotice.nothingToPay.body': 'This booking{who} costs 0 ₾, so there is nothing to mark as paid.',
+  'statusNotice.failed.title': 'The status was not changed.',
+  'statusNotice.failed.body': 'Nothing was saved — please try again.',
+
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
   'orders.visit.tastingLunch': 'Tasting + Lunch',
@@ -1974,6 +1984,16 @@ const ka: Translations = {
   'paymentMethod.cancel': 'გაუქმება',
   'paymentMethod.card': 'ბარათი',
   'paymentMethod.manual': 'აღინიშნა როგორც გადახდილი',
+
+  // T-318 — one shared notice when a status change is refused (Q-11 / Q-12) or fails
+  'statusNotice.dismiss': 'დახურვა',
+  'statusNotice.noPrice.title': 'ჯერ დააყენეთ ფასი.',
+  'statusNotice.noPrice.booking': 'ამ ჯავშანს{who} ფასი ჯერ არ აქვს, ამიტომ გადახდილად ვერ აღინიშნება.',
+  'statusNotice.noPrice.wine': 'ამ ღვინის შეკვეთას{who} ფასი ჯერ არ აქვს, ამიტომ გადახდილად ვერ აღინიშნება.',
+  'statusNotice.nothingToPay.title': 'გადასახდელი არ არის.',
+  'statusNotice.nothingToPay.body': 'ამ ჯავშნის ღირებულება 0 ₾-ია{who}, ამიტომ გადახდილად აღსანიშნავი არაფერია.',
+  'statusNotice.failed.title': 'სტატუსი არ შეიცვალა.',
+  'statusNotice.failed.body': 'არაფერი შეინახა — სცადეთ ხელახლა.',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',

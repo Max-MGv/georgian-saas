@@ -315,6 +315,9 @@ where it appears in each of the six pickers. Max's decisions recorded in §3 bef
   not measured; the real 375 px pass (Rule 12.2) happens on the build. All Georgian is Claude's draft (decision 7).
 - **Decisions waiting (board 9):** 1 Card style (A/B, rec. B) · 2 popup · 3 Bank/Cash warning · 4 cancelled notice · 5 price notice · 6 Nothing to pay · 7 Georgian wording ·
   8 release order (R1 T-321 → R2 settlement + notices + Nothing to pay + link basics → R3 Card everywhere).
+- **Max's answers (2026-10-29, chat): "as recommended" — the whole board.** Card style **B** (outlined + hint); decisions 2–8 as shown; and the separate
+  cancelled-order question (KnownBugs #98) also "as recommended" → **no emails** for card money on a cancelled order; the amber notice + a note carry it;
+  **reopening re-marks Paid** when live money covers the total. Recorded on T-318 (both questions answered, one `decide`). Georgian wording stays Claude's draft until a native read.
 - **Resume point:** wait for Max's answers; record them in §3 (and with `tix decide`); then build **R2 UI** (Chunk 2 Q-11 block with the shared notice, Q-2 notice, Chunk 2b) and,
   after R2, Chunk 5 / 6 (the Card step). No UI code before the answers.
 

@@ -22,6 +22,7 @@ import {
   type FlowState,
 } from '@/lib/statusFlow'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import HelpHint from '@/components/HelpHint'
 import DateInput from '@/components/DateInput'
 import PackingView, { type WineOrderItem, type BoxMode } from './PackingView'
@@ -1494,6 +1495,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
 }) {
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState<WineOrder[]>(initial)
+  const statusNotice = useStatusNotice()
   const [mode, setMode] = useState<Mode>('cards')
   const [filters, setFilters] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -1604,7 +1606,13 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
       setRecentlyInactive(s => new Set([...s, id]))
       setTimeout(() => setRecentlyInactive(s => { const n = new Set(s); n.delete(id); return n }), 520)
     }
-    startTransition(async () => { await changeWineOrderStatus(id, change) })
+    startTransition(async () => {
+      const result = await changeWineOrderStatus(id, change)
+      // T-318: a refused change ("Set the price first") used to leave the optimistic patch standing.
+      if (statusNotice.report(result, 'wine', prev.businessName)) {
+        setOrders(p => p.map(o => (o.id === id ? prev : o)))
+      }
+    })
   }
 
   function requestChange(orderId: string, change: WineOrderStatusChange, label: string) {
@@ -1646,6 +1654,8 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   const modeLabel = (m: Mode) => m === 'cards' ? at('wineOrders.mode.cards') : m === 'table' ? at('orders.view.table') : m === 'board' ? at('wineOrders.mode.board') : m === 'calendar' ? at('orders.view.calendar') : at('wineOrders.mode.pack')
 
   const modeToggle = (
+    <>
+    <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
     <div className="flex items-center gap-1.5 mb-3 md:mb-5 self-start max-w-full">
       {/* min-w-0 + overflow-x-auto: Georgian labels are long, and at 320px the four tabs
           plus the "?" are wider than the screen - scroll the tabs rather than the page. */}
@@ -1668,6 +1678,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
       </div>
       <HelpHint text={at('help.wineOrders.packMode')} />
     </div>
+    </>
   )
 
   function toggleFilter(f: string) {

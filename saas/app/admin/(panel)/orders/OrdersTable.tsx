@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
@@ -705,6 +706,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
+  const statusNotice = useStatusNotice()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
@@ -923,6 +925,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   async function handleStatusChange(orderId: string, change: BookingStatusChange) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
+    const before = orders.find(o => o.id === orderId)
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
       // Literally the same patch functions the server is about to call, so the
@@ -931,7 +934,12 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       // which is where that kind of drift would be invisible.
       return { ...o, ...optimisticPatch(o, change) }
     }))
-    await changeBookingStatus(orderId, change)
+    const result = await changeBookingStatus(orderId, change)
+    // T-318: a refused change ("Set the price first", "Nothing to pay", a failed write)
+    // used to leave the optimistic patch standing until the next refresh. Put the row back.
+    if (statusNotice.report(result, 'booking', before ? `${before.name} ${before.surname}` : '') && before) {
+      setOrders(prev => prev.map(o => (o.id === orderId ? before : o)))
+    }
   }
 
   // Typed HTMLElement, not HTMLButtonElement — the mobile card list's trigger is
@@ -1023,6 +1031,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   return (
     <>
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="sticky top-2 z-30 mt-4" />
       {/* ── Mobile card list (hidden on md+) ──────────────────── */}
       <div className="flex flex-col gap-3 mt-4 md:hidden">
         {orders.length === 0 && (

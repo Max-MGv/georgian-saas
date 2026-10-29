@@ -23,6 +23,7 @@ import { addOrderExtra, removeOrderExtra, updateOrderExtra } from '@/app/actions
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -775,6 +776,7 @@ export default function OrderDetail({
     invoiceSentAt: order.invoiceSentAt,
     paidAt: order.paidAt,
   })
+  const statusNotice = useStatusNotice()
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   // The 'paid' step swaps the menu to this picker instead of firing right
   // away, so the ledger records Bank transfer / Cash rather than a guessed
@@ -858,8 +860,11 @@ export default function OrderDetail({
 
   async function handleStatusChange(change: BookingStatusChange) {
     setStatusMenuOpen(false)
+    const before = flow
     applyLocally(change)
-    await changeBookingStatus(order.id, change)
+    const result = await changeBookingStatus(order.id, change)
+    // T-318: a refused change used to leave the optimistic patch standing — put the flow back.
+    if (statusNotice.report(result, 'booking', `${order.name} ${order.surname}`)) setFlow(before)
   }
 
   /** A menu step was clicked — 'paid' opens the method picker instead of
@@ -1363,6 +1368,8 @@ export default function OrderDetail({
           )}
         </div>
       </div>
+
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
 
       {/* The merged one-line flow. Sits under the header rather than beside the
           pill because it is the whole story of the order, and the pill is only

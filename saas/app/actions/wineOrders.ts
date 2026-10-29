@@ -24,6 +24,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { WineOrderStatusChange } from '@/lib/statusWrite'
+import { wineMoneyRefusal, type StatusChangeResult } from '@/lib/statusRefusal'
 import type { WineOrderStage } from '@prisma/client'
 
 /**
@@ -37,7 +38,7 @@ import type { WineOrderStage } from '@prisma/client'
 export async function changeWineOrderStatus(
   id: string,
   change: WineOrderStatusChange
-): Promise<{ success: true } | { error: string }> {
+): Promise<StatusChangeResult> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
@@ -61,6 +62,10 @@ export async function changeWineOrderStatus(
         select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true },
       })
       if (!current) return { count: 0 }
+      // Q-11: nothing priced = nothing to mark paid (a fee still "to be set" counts as 0,
+      // so wines alone are enough — Q-9). Server-side, before any write.
+      const refusal = wineMoneyRefusal(wineOrderAmountDue(current), change)
+      if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = {
         confirmedAt: current.confirmedAt,
@@ -97,6 +102,7 @@ export async function changeWineOrderStatus(
       }
       return updated
     })
+    if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Wine order not found.' }
     revalidatePath('/admin/wine-orders')
     revalidatePath('/admin/abandoned')
