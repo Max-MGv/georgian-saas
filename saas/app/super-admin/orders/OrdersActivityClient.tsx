@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { asTetri, asTetriOrNull, formatTetri, formatTetriOrDash, multiplyTetri } from '@/lib/money'
+import type { PaymentFilter } from '@/lib/orderFilters'
 
 const C = {
   card: '#111827',
@@ -16,7 +17,7 @@ const C = {
 type Booking = {
   id: string
   stage: string
-  payment: 'paid' | 'invoiced' | 'unpaid'
+  payment: PaymentFilter
   date: string
   timeSlot: string
   bookingType: 'INDIVIDUAL' | 'COMPANY'
@@ -35,7 +36,7 @@ type WineOrder = {
   businessName: string
   contactName: string
   stage: string
-  payment: 'paid' | 'invoiced' | 'unpaid'
+  payment: PaymentFilter
   createdAt: string
   displayTotal: number
   bottleCount: number
@@ -56,7 +57,7 @@ const WINE_STATUS_LABEL: Record<string, string> = {
 }
 
 /** Paid beats invoiced — an order that was invoiced and then paid reads as paid. */
-function PaymentMark({ payment }: { payment: 'paid' | 'invoiced' | 'unpaid' }) {
+function PaymentMark({ payment }: { payment: PaymentFilter }) {
   if (payment === 'paid') return <span title="Paid" style={{ color: '#4ade80' }}> ₾✓</span>
   if (payment === 'invoiced') return <span title="Invoice sent" style={{ color: '#fbbf24' }}> ✉</span>
   return null

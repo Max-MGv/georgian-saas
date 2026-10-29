@@ -52,9 +52,19 @@ export const ONLY_ABANDONED = { abandonedAt: { not: null } } as const
  */
 export const NOT_CANCELLED = { stage: { not: 'CANCELLED' } } as const
 
-/** The three values the payment filter accepts. */
-export const PAYMENT_FILTERS = ['paid', 'invoiced', 'unpaid'] as const
+/**
+ * The values the payment filter accepts.
+ *
+ * Four since T-318 (Q-12): `nothing` is a booking whose total is set and is exactly 0 ₾ — all guests
+ * free, a partner visit. It cannot be Paid (the server refuses it) and calling it Unpaid would leave
+ * it in the Unpaid count forever, so it is its own quiet state. A booking with NO price yet (total
+ * not set) is different: it stays Unpaid, and marking it paid says "Set the price first".
+ */
+export const PAYMENT_FILTERS = ['paid', 'invoiced', 'unpaid', 'nothing'] as const
 export type PaymentFilter = (typeof PAYMENT_FILTERS)[number]
+
+/** A total that is not exactly 0 ₾ — NULL (price not set yet) included, which SQL's `<> 0` would drop. */
+const NOT_FREE = { OR: [{ totalPrice: null }, { totalPrice: { gt: 0 } }] }
 
 /**
  * The payment filter, expressed over dates rather than a status column.
@@ -65,12 +75,15 @@ export type PaymentFilter = (typeof PAYMENT_FILTERS)[number]
  * old payment ladder it could only ever be one or the other, because marking it
  * paid overwrote the invoice; two independent dates can say both.
  *
- * The three **partition** the orders exactly — nothing is in two buckets and
+ * The four **partition** the orders exactly — nothing is in two buckets and
  * nothing is in none. That is not cosmetic: these drive a picker that shows a
  * count beside each option, and the last release reported `All statuses (31)`
  * against 21 bookings because two of its entries overlapped. So `unpaid` means
  * "we have not even asked yet", not merely "not paid" — an invoiced order that
- * has not settled answers `invoiced`, which is the chasing list.
+ * has not settled answers `invoiced`, which is the chasing list. A 0 ₾ booking
+ * that is not paid answers `nothing` whatever else is set on it (an old invoice
+ * on a free booking must not sit in the chasing list); a 0 ₾ booking that was
+ * marked Paid in the past stays `paid` — history is not rewritten.
  *
  * An unrecognised value matches everything rather than nothing, so a stale
  * bookmark shows the unfiltered list instead of an empty one that reads as "you
@@ -81,9 +94,11 @@ export function paymentFilterWhere(payment: string | undefined | null) {
     case 'paid':
       return { paidAt: { not: null } }
     case 'invoiced':
-      return { paidAt: null, invoiceSentAt: { not: null } }
+      return { paidAt: null, invoiceSentAt: { not: null }, ...NOT_FREE }
     case 'unpaid':
-      return { paidAt: null, invoiceSentAt: null }
+      return { paidAt: null, invoiceSentAt: null, ...NOT_FREE }
+    case 'nothing':
+      return { paidAt: null, totalPrice: 0 }
     default:
       return {}
   }
@@ -93,8 +108,11 @@ export function paymentFilterWhere(payment: string | undefined | null) {
 export function paymentStateOf(o: {
   paidAt: Date | string | null
   invoiceSentAt?: Date | string | null
+  /** Bookings only. Left out (wine orders, callers without it) → never `nothing`. */
+  totalPrice?: number | null
 }): PaymentFilter {
   if (o.paidAt != null) return 'paid'
+  if (o.totalPrice === 0) return 'nothing'
   if (o.invoiceSentAt != null) return 'invoiced'
   return 'unpaid'
 }

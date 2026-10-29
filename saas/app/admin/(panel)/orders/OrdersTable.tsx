@@ -157,11 +157,13 @@ function menuSteps(order: Order): MenuStep[] {
     .filter(code => code !== CANCELLED)
     .map(code => ({ code, change: { kind: 'stage', stage: code } as const }))
 
+  // Nothing to collect on a booking that costs 0 ₾ (T-318 Q-12): no Invoice-sent and no Paid step.
+  const free = order.paidAt == null && order.totalPrice === 0
   // "We have asked for money" only makes sense while the money has not arrived.
-  if (order.invoiceSentAt == null && order.paidAt == null) {
+  if (order.invoiceSentAt == null && order.paidAt == null && !free) {
     steps.push({ code: 'invoiced', change: { kind: 'invoiceSent', value: true } })
   }
-  if (order.paidAt == null) {
+  if (order.paidAt == null && !free) {
     steps.push({ code: 'paid', change: { kind: 'paid', value: true } })
   }
   if (order.stage !== CANCELLED) {
@@ -224,7 +226,7 @@ function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: s
  * financial axis has already moved off `invoiced`.
  */
 function PaymentMark({ order, locale }: {
-  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null }
+  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null; totalPrice?: number | null }
   locale: string
 }) {
   if (paymentStateOf(order) === 'paid') {
@@ -232,6 +234,10 @@ function PaymentMark({ order, locale }: {
   }
   if (paymentStateOf(order) === 'invoiced') {
     return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
+  }
+  // A booking that genuinely costs 0 ₾ (T-318 Q-12): quiet grey, nothing to chase.
+  if (paymentStateOf(order) === 'nothing') {
+    return <Mark label={adminT(locale, 'orders.status.nothingToPay')} glyph="₾0" bg="#eceae6" color="#6b5f51" />
   }
   return null
 }
@@ -399,6 +405,7 @@ function MobileOrderCard({ order, locale, onOpen, onStatusMenu }: {
         )}
         {pay === 'paid' && chip(`₾✓ ${at('orders.status.paid')}`, '#dcfce7', '#166534')}
         {pay === 'invoiced' && chip(at('orders.status.invoiceSent'), '#fef3c7', '#92400e')}
+        {pay === 'nothing' && chip(at('orders.status.nothingToPay'), '#eceae6', '#6b5f51')}
         {balance > 0 && chip(`⚠ ${at('orders.balanceDue')}: ${formatTetri(asTetri(balance), { decimals: true })}`, '#fef3c7', '#92400e')}
         <span className="ml-auto font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1.05rem' }}>
           {formatTetriOrDash(asTetriOrNull(order.totalPrice))}

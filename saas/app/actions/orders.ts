@@ -36,7 +36,7 @@ import {
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
 import { bookingMoneyRefusal, type StatusChangeResult } from '@/lib/statusRefusal'
-import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
+import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
@@ -852,7 +852,8 @@ export async function exportOrdersCsv(filters: {
     toMajor(asTetri(sumWineLines(o.wineLines))),
     o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
-    o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
+    // 'nothing' = a 0 GEL booking (T-318 Q-12): not owed, so not 'unpaid' in an accountant's sheet either.
+    paymentStateOf(o) === 'nothing' ? 'nothing to pay' : paymentStateOf(o),
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
     o.invoiceSentAt ? o.invoiceSentAt.toLocaleDateString('en-GB') : '',
     o.email ?? '',
