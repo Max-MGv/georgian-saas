@@ -40,6 +40,17 @@ check('paid ✓ with wines priced (fee still unset counts as 0) → allowed', wi
 check('paid ✗ on a 0-due order → allowed', wineMoneyRefusal(0, { kind: 'paid', value: false }) === null)
 check('stage / restore never refused', wineMoneyRefusal(null, { kind: 'stage' }) === null && wineMoneyRefusal(null, { kind: 'restore' }) === null)
 
+console.log('\nCancelled orders cannot be marked Paid by any method\n')
+check('booking: paid ✓ on a CANCELLED booking → CANCELLED', code(bookingMoneyRefusal(15000, { kind: 'paid', value: true }, 'CANCELLED')) === 'CANCELLED')
+check('booking: paid ✓ on a live stage → allowed', bookingMoneyRefusal(15000, { kind: 'paid', value: true }, 'CONFIRMED') === null)
+check('booking: paid ✗ (un-pay) on a CANCELLED booking → allowed (correcting a mistake)', bookingMoneyRefusal(15000, { kind: 'paid', value: false }, 'CANCELLED') === null)
+check('booking: a stage change out of CANCELLED (reopen) is never refused', bookingMoneyRefusal(15000, { kind: 'stage' }, 'CANCELLED') === null)
+check('booking: invoice sent on a CANCELLED booking is not part of this rule', bookingMoneyRefusal(15000, { kind: 'invoiceSent', value: true }, 'CANCELLED') === null)
+check('wine: paid ✓ on a CANCELLED wine order → CANCELLED', code(wineMoneyRefusal(12000, { kind: 'paid', value: true }, 'CANCELLED')) === 'CANCELLED')
+check('wine: paid ✓ on a live stage → allowed', wineMoneyRefusal(12000, { kind: 'paid', value: true }, 'NEW') === null)
+check('wine: paid ✗ (un-pay) on a CANCELLED wine order → allowed', wineMoneyRefusal(12000, { kind: 'paid', value: false }, 'CANCELLED') === null)
+check('wine: reopen (stage change) is never refused', wineMoneyRefusal(12000, { kind: 'stage' }, 'CANCELLED') === null)
+
 console.log('\nMalformed payloads (crafted requests)\n')
 const KINDS = ['stage', 'paid', 'invoiceSent', 'restore']
 check('paid with value 1 (truthy, not boolean) is rejected', malformedChange({ kind: 'paid', value: 1 }, KINDS) !== null)

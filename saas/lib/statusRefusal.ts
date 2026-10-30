@@ -9,8 +9,12 @@
  *
  * - `NO_PRICE`        — the total is not set (booking) or the wines come to 0 (wine order).
  * - `NOTHING_TO_PAY`  — a booking whose total is set and is exactly 0 ₾ (Q-12).
+ * - `CANCELLED`       — a cancelled order cannot be marked Paid by any method (Max, 2026-10-30; the
+ *                       card paths and the top-up recorders already refuse it).
  */
-export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY'
+export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY' | 'CANCELLED'
+
+const CANCELLED_NOT_PAYABLE = 'This order is cancelled, so it cannot be marked paid.'
 
 export type StatusChangeResult =
   /** `reopenedPaid`: a cancelled order was reopened and, because card money already covers it, marked Paid again. */
@@ -35,13 +39,16 @@ export function malformedChange(change: { kind?: unknown; value?: unknown; metho
 /**
  * Whether a booking's total allows a payment / invoice step.
  * `null` total = price not set yet; 0 = genuinely free (Q-11 / Q-12).
+ * `stage`: a cancelled booking cannot be marked Paid (un-paying one stays possible, to correct a mistake).
  */
 export function bookingMoneyRefusal(
   totalPrice: number | null,
   change: { kind: string; value?: boolean },
+  stage?: string | null,
 ): { error: string; code: StatusRefusalCode } | null {
   const takesMoney = change.kind === 'paid' || change.kind === 'invoiceSent'
   if (!takesMoney || change.value !== true) return null
+  if (change.kind === 'paid' && stage === 'CANCELLED') return { error: CANCELLED_NOT_PAYABLE, code: 'CANCELLED' }
   if (totalPrice == null) {
     // An invoice on an unpriced booking is allowed today (the invoice flow has its
     // own checks); only "Paid" is blocked for it.
@@ -55,7 +62,9 @@ export function bookingMoneyRefusal(
 export function wineMoneyRefusal(
   amountDue: number | null,
   change: { kind: string; value?: boolean },
+  stage?: string | null,
 ): { error: string; code: StatusRefusalCode } | null {
   if (change.kind !== 'paid' || change.value !== true) return null
+  if (stage === 'CANCELLED') return { error: CANCELLED_NOT_PAYABLE, code: 'CANCELLED' }
   return amountDue == null || amountDue <= 0 ? { error: 'Set the price first.', code: 'NO_PRICE' } : null
 }

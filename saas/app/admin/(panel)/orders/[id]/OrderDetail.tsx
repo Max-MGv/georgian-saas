@@ -1287,7 +1287,8 @@ export default function OrderDetail({
     // No Invoice-sent / Paid step on a booking that costs 0 ₾ (T-318 Q-12): there is nothing to collect.
     ...(flow.invoiceSentAt == null && flow.paidAt == null && order.totalPrice !== 0
       ? [{ code: 'invoiced', change: { kind: 'invoiceSent' as const, value: true } }] : []),
-    ...(flow.paidAt == null && order.totalPrice !== 0
+    // Not on a cancelled booking either: it cannot be marked Paid by any method (the server refuses it too).
+    ...(flow.paidAt == null && order.totalPrice !== 0 && flow.stage !== CANCELLED
       ? [{ code: 'paid', change: { kind: 'paid' as const, value: true } }] : []),
     ...(flow.stage !== CANCELLED
       ? [{ code: CANCELLED, change: { kind: 'stage' as const, stage: CANCELLED } }] : []),

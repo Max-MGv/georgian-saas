@@ -69,7 +69,7 @@ export async function changeWineOrderStatus(
       if (!current) return { count: 0 }
       // Q-11: nothing priced = nothing to mark paid (a fee still "to be set" counts as 0,
       // so wines alone are enough — Q-9). Server-side, before any write.
-      const refusal = wineMoneyRefusal(wineOrderAmountDue(current), change)
+      const refusal = wineMoneyRefusal(wineOrderAmountDue(current), change, current.stage)
       if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = {

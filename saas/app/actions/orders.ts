@@ -1024,7 +1024,7 @@ export async function changeBookingStatus(
       // Q-11 / Q-12: no price, or a genuinely free booking, cannot be marked paid or
       // invoiced by any method. Checked on the server before any write — a hidden
       // button is not a rule.
-      const refusal = bookingMoneyRefusal(current.totalPrice, change)
+      const refusal = bookingMoneyRefusal(current.totalPrice, change, current.stage)
       if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = toCurrentDates(current)

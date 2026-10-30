@@ -17,7 +17,7 @@ import type { StatusChangeResult } from '@/lib/statusRefusal'
 type Subject = 'booking' | 'wine'
 
 export type StatusNoticeState =
-  | { kind: 'noPrice' | 'nothingToPay' | 'failed'; subject: Subject; who: string; key: string }
+  | { kind: 'noPrice' | 'nothingToPay' | 'cancelled' | 'failed'; subject: Subject; who: string; key: string }
   | null
 
 export function useStatusNotice() {
@@ -34,7 +34,10 @@ export function useStatusNotice() {
       setNotice(n => (n && n.key === key ? null : n))
       return false
     }
-    const kind = result.code === 'NO_PRICE' ? 'noPrice' : result.code === 'NOTHING_TO_PAY' ? 'nothingToPay' : 'failed'
+    const kind = result.code === 'NO_PRICE' ? 'noPrice'
+      : result.code === 'NOTHING_TO_PAY' ? 'nothingToPay'
+        : result.code === 'CANCELLED' ? 'cancelled'
+          : 'failed'
     setNotice({ kind, subject, who: (who ?? '').trim(), key })
     return true
   }
@@ -56,7 +59,9 @@ export function StatusChangeNotice({ notice, onDismiss, locale, className }: {
       ? [at('statusNotice.noPrice.title'), at(notice.subject === 'wine' ? 'statusNotice.noPrice.wine' : 'statusNotice.noPrice.booking', { who })]
       : notice.kind === 'nothingToPay'
         ? [at('statusNotice.nothingToPay.title'), at('statusNotice.nothingToPay.body', { who })]
-        : [at('statusNotice.failed.title'), at('statusNotice.failed.body')]
+        : notice.kind === 'cancelled'
+          ? [at('statusNotice.cancelled.title'), at(notice.subject === 'wine' ? 'statusNotice.cancelled.wine' : 'statusNotice.cancelled.booking', { who })]
+          : [at('statusNotice.failed.title'), at('statusNotice.failed.body')]
 
   return (
     <div

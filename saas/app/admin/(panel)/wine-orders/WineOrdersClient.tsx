@@ -189,7 +189,8 @@ function menuSteps(order: WineOrder): MenuStep[] {
   const steps: MenuStep[] = unreachedStages(WINE_ORDER_STAGES, flowStateOf(order))
     .filter(code => code !== CANCELLED)
     .map(code => ({ code, change: { kind: 'stage' as const, stage: code } }))
-  if (order.paidAt == null) {
+  // A cancelled wine order cannot be marked Paid by any method (the server refuses it too).
+  if (order.paidAt == null && order.stage !== CANCELLED) {
     steps.push({ code: 'PAID', change: { kind: 'paid', value: true } })
   }
   if (order.stage !== CANCELLED) {

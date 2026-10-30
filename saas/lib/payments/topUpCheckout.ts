@@ -50,7 +50,7 @@
  * stops the admin from generating a link for an amount that's already
  * wrong at the moment they click the button.
  */
-import { db } from '@/lib/db'
+import { db, type TxClient } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { wineOrderBalance, CANCELLED_REFUSAL } from '@/lib/payments/manualPayment'
@@ -137,12 +137,38 @@ export function pickCheckoutLocale(stored: Record<string, string>): 'ka' | 'en' 
 
 /** One open link per order (Q-5): the same amount again hands back the link that is already payable. */
 async function reuseOpenLink(
+  client: TxClient,
   ref: { orderId: string } | { wineOrderId: string },
   amount: number
 ): Promise<StartTopUpCheckoutResult | null> {
-  const open = await findOpenAdminLink(db, ref, { amount })
+  const open = await findOpenAdminLink(client, ref, { amount })
   if (!open) return null
   return { success: true, checkoutUrl: open.checkoutUrl, paymentId: open.id, expiresAt: open.expiresAt.toISOString(), reused: true }
+}
+
+/**
+ * "Is a link already open? If not, make one" as ONE step per order (T-318, Max 2026-10-30): two admins
+ * pressing Card at the same moment (or a double-click) used to both find nothing open, because the first
+ * link only exists once Flitt has answered — about a second later — and so minted two links. A Postgres
+ * advisory lock keyed on the order makes the second caller wait for the first, then find ITS link and get
+ * it back (`reused`). The Flitt call runs inside the lock; the Payment row is written by `startCheckout`
+ * on its own connection and is committed before the lock is released, so the waiter sees it.
+ * Held for the length of one Flitt call (~1–3 s); the timeout leaves room for a slow gateway.
+ */
+async function oneLinkAtATime(
+  ref: { orderId: string } | { wineOrderId: string },
+  input: { tenantId: string; amount: Tetri; orderDesc: string; locale?: string }
+): Promise<StartTopUpCheckoutResult> {
+  // Everything that needs another connection is read BEFORE the lock is taken: inside it the step runs on
+  // the transaction's own connection only, so a small serverless pool cannot deadlock against itself.
+  const prep = await prepareCheckout(input.tenantId, input.locale)
+  const key = `admin-link:${'orderId' in ref ? ref.orderId : ref.wineOrderId}`
+  return db.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
+    const reused = await reuseOpenLink(tx, ref, input.amount)
+    if (reused) return reused
+    return 'error' in prep ? prep : runTopUpCheckout(tx, ref, input, prep)
+  }, { maxWait: 15_000, timeout: 45_000 })
 }
 
 export async function startTopUpCheckout(
@@ -175,7 +201,7 @@ export async function startTopUpCheckout(
     }
   }
 
-  return (await reuseOpenLink({ orderId: input.orderId }, input.amount)) ?? runTopUpCheckout({ orderId: input.orderId }, input)
+  return oneLinkAtATime({ orderId: input.orderId }, input)
 }
 
 /**
@@ -205,21 +231,21 @@ export async function startWineTopUpCheckout(
       error: `That's more than the outstanding balance of ${formatTetri(owed.balance, { decimals: true })}.`,
     }
   }
-  return (await reuseOpenLink({ wineOrderId: input.wineOrderId }, input.amount)) ?? runTopUpCheckout({ wineOrderId: input.wineOrderId }, input)
+  return oneLinkAtATime({ wineOrderId: input.wineOrderId }, input)
 }
 
-/** Credentials + the Flitt call + finding our own Payment row — shared by both top-ups. */
-async function runTopUpCheckout(
-  target: { orderId: string } | { wineOrderId: string },
-  input: { tenantId: string; amount: Tetri; orderDesc: string; locale?: string }
-): Promise<StartTopUpCheckoutResult> {
-  const internalId = 'orderId' in target ? target.orderId : target.wineOrderId
-  // Credentials only — deliberately NOT shouldTakePayment()/isPaymentConfigured()'s
-  // module/section toggles or company override (ground rule 5). Read directly
-  // from Tenant, same fields shouldTakePayment() itself reads, but with none
-  // of its business-policy gating.
+type CheckoutPrep = { merchantId: string; secretKey: string; locale: 'ka' | 'en' | string } | { error: string }
+
+/**
+ * What a checkout needs beyond the order: the tenant's Flitt credentials and the page language.
+ * Credentials only — deliberately NOT shouldTakePayment()/isPaymentConfigured()'s
+ * module/section toggles or company override (ground rule 5). Read directly
+ * from Tenant, same fields shouldTakePayment() itself reads, but with none
+ * of its business-policy gating.
+ */
+async function prepareCheckout(tenantId: string, locale?: string): Promise<CheckoutPrep> {
   const tenant = await db.tenant.findUnique({
-    where: { id: input.tenantId },
+    where: { id: tenantId },
     select: { flittMerchantId: true, flittSecretKey: true },
   })
   const merchantId = tenant?.flittMerchantId?.trim()
@@ -229,18 +255,29 @@ async function runTopUpCheckout(
       error: 'Card payments are not set up for this tenant yet — add Flitt credentials in Settings first.',
     }
   }
+  return { merchantId, secretKey, locale: locale ?? (await checkoutLocale(tenantId)) }
+}
 
+/** The Flitt call + finding our own Payment row — shared by both top-ups. Runs on the lock's transaction. */
+async function runTopUpCheckout(
+  client: TxClient,
+  target: { orderId: string } | { wineOrderId: string },
+  input: { tenantId: string; amount: Tetri; orderDesc: string },
+  prep: { merchantId: string; secretKey: string; locale: string }
+): Promise<StartTopUpCheckoutResult> {
+  const internalId = 'orderId' in target ? target.orderId : target.wineOrderId
   const flittOrderId = mintTopUpFlittOrderId(internalId)
 
   const checkoutUrl = await startCheckout({
     tenantId: input.tenantId,
-    merchantId,
-    secretKey,
+    merchantId: prep.merchantId,
+    secretKey: prep.secretKey,
     ...target,
     amount: input.amount,
     orderDesc: input.orderDesc,
-    locale: input.locale ?? (await checkoutLocale(input.tenantId)),
+    locale: prep.locale,
     flittOrderId,
+    client,
     // 7 days instead of Flitt's 10 h default (Q-4). The guest's own checkout keeps the default.
     lifetimeSeconds: ADMIN_LINK_LIFETIME_SECONDS,
   })
@@ -254,7 +291,7 @@ async function runTopUpCheckout(
   // URL. Re-reading it here rather than trusting anything client-supplied
   // later: the follow-up "email this link" step looks the row up by this id,
   // not by a checkoutUrl/amount pair a browser could have tampered with.
-  const paymentRow = await db.payment.findFirst({
+  const paymentRow = await client.payment.findFirst({
     where: { ...target, tenantId: input.tenantId, provider: 'flitt', checkoutUrl },
     orderBy: { createdAt: 'desc' },
     select: { id: true, createdAt: true },

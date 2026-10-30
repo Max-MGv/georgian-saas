@@ -167,7 +167,8 @@ function menuSteps(order: Order): MenuStep[] {
   if (order.invoiceSentAt == null && order.paidAt == null && !free) {
     steps.push({ code: 'invoiced', change: { kind: 'invoiceSent', value: true } })
   }
-  if (order.paidAt == null && !free) {
+  // A cancelled booking cannot be marked Paid by any method (the server refuses it too).
+  if (order.paidAt == null && !free && order.stage !== CANCELLED) {
     steps.push({ code: 'paid', change: { kind: 'paid', value: true } })
   }
   if (order.stage !== CANCELLED) {

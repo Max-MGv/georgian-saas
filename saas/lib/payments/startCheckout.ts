@@ -1,5 +1,5 @@
 import { headers } from 'next/headers'
-import { db } from '@/lib/db'
+import { db, type TxClient } from '@/lib/db'
 import { createCheckout } from '@/lib/payments/flitt'
 import type { Tetri } from '@/lib/money'
 
@@ -51,6 +51,9 @@ export async function startCheckout(input: {
   flittOrderId?: string
   /** Seconds the link stays payable; omitted → Flitt's 10 h default (the guest's own checkout). */
   lifetimeSeconds?: number
+  /** Write the Payment row through this client (default: the shared one). An admin link made while an
+   *  advisory lock is held passes its transaction, so the whole step stays on ONE connection. */
+  client?: TxClient
 }): Promise<string | null> {
   // The tenant's real domain for this request — never hardcoded. The old site
   // pinned https://www.nikalasmarani.ge/ in the controller, which broke the
@@ -87,7 +90,7 @@ export async function startCheckout(input: {
   }
 
   try {
-    await db.payment.create({
+    await (input.client ?? db).payment.create({
       data: {
         tenantId: input.tenantId,
         orderId: input.orderId ?? null,
