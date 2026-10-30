@@ -43,6 +43,8 @@ const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
 export async function deleteOrder(id: string) {
   await requireAdmin()
+  // A crafted object here would become a Prisma filter and could match every order of the tenant.
+  if (typeof id !== 'string' || !id) return { error: 'Order not found.' }
   const tenantId = await getTenantId()
   await withTenantDb(tenantId, tx => tx.order.deleteMany({ where: { id, tenantId } }))
   revalidatePath('/admin/orders')
@@ -1114,6 +1116,10 @@ export async function recordTopUpPayment(
   if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
 
   const result = await withTenantDb(tenantId, async tx => {
+    // A top-up is for an order that is already Paid and then owes more. On an unpaid one it would put the full
+    // amount on the ledger yet leave the order Unpaid; "Mark as paid" is the way to settle those.
+    const state = await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } })
+    if (state && state.paidAt == null) return { error: 'This booking is not paid yet — mark it as paid instead.' }
     const recorded = await recordAdditionalPayment(tx, {
       orderId,
       tenantId,

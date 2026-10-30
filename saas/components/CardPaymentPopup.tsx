@@ -57,6 +57,8 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const [phase, setPhase] = useState<Phase>('loading')
+  // Paid by someone else before a link was needed (no link, so no amount to show).
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
   const [link, setLink] = useState<CardLink | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -95,6 +97,7 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
     if ('error' in result) {
       if (result.code === 'ALREADY_PAID') {
         // Paid in the meantime (the guest used an earlier link, or another admin recorded it): not an error.
+        setAlreadyPaid(true)
         setPhase('paid')
         if (!paidReported.current) { paidReported.current = true; onPaidRef.current(0) }
         return
@@ -231,9 +234,11 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
         >
           {phase === 'paid' ? (
             <>
-              <Dialog.Title className="text-sm font-semibold mb-1">{at('cardPay.paidTitle')}</Dialog.Title>
+              <Dialog.Title className="text-sm font-semibold mb-1">{at(alreadyPaid ? 'cardPay.alreadyPaidTitle' : 'cardPay.paidTitle')}</Dialog.Title>
               <Dialog.Description className="text-xs mb-4" style={{ color: 'var(--site-secondary)' }}>
-                {at(subject === 'wine' ? 'cardPay.paidBody.wine' : 'cardPay.paidBody.booking', { amount: money })}
+                {alreadyPaid
+                  ? at(subject === 'wine' ? 'cardPay.alreadyPaidBody.wine' : 'cardPay.alreadyPaidBody.booking')
+                  : at(subject === 'wine' ? 'cardPay.paidBody.wine' : 'cardPay.paidBody.booking', { amount: money })}
               </Dialog.Description>
               <button onClick={() => void close()} className={btnClass} style={{ ...primary, ...btnH }}>{at('cardPay.done')}</button>
             </>

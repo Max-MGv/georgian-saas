@@ -2336,7 +2336,7 @@ export default function OrderDetail({
             KnownBugs #64) — only offered once there is a real, positive
             balance to collect. A credit (balance < 0) has nothing to record
             a payment against; that case is display-only. */}
-        {isPaid && balance > 0 && (
+        {isPaid && balance > 0 && !isCancelled(flow) && (
           <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
             {!recordingPayment ? (
               <button
@@ -2408,7 +2408,7 @@ export default function OrderDetail({
             the guest's own card, alongside the manual entry above. Same gate
             as "Record payment": only offered against a real, positive
             balance. */}
-        {isPaid && balance > 0 && (
+        {isPaid && balance > 0 && !isCancelled(flow) && (
           <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
             {!startingLink ? (
               <button

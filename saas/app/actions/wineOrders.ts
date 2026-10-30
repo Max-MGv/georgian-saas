@@ -394,6 +394,9 @@ export async function recordWineOrderFeePayment(
   if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
+    // Same rule as bookings: a top-up is for a wine order that is already Paid and then owes more.
+    const state = await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } })
+    if (state && state.paidAt == null) return { error: 'This wine order is not paid yet — mark it as paid instead.' }
     const recorded = await recordAdditionalWinePayment(tx, {
       wineOrderId: id, tenantId, amount: data.amount, method: data.method, at: new Date(),
     })

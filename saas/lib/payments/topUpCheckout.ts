@@ -174,6 +174,8 @@ async function oneLinkAtATime(
 export async function startTopUpCheckout(
   input: StartTopUpCheckoutInput
 ): Promise<StartTopUpCheckoutResult> {
+  // Whole tetri only: a crafted NaN / 12.5 used to reach Prisma and throw instead of answering.
+  if (!Number.isInteger(input.amount)) return { error: 'Enter a valid amount.' }
   if (input.amount <= 0) {
     return { error: 'Enter an amount greater than zero.' }
   }
@@ -212,6 +214,7 @@ export async function startTopUpCheckout(
 export async function startWineTopUpCheckout(
   input: { wineOrderId: string; tenantId: string; amount: Tetri; orderDesc: string; locale?: string }
 ): Promise<StartTopUpCheckoutResult> {
+  if (!Number.isInteger(input.amount)) return { error: 'Enter a valid amount.' }
   if (input.amount <= 0) {
     return { error: 'Enter an amount greater than zero.' }
   }

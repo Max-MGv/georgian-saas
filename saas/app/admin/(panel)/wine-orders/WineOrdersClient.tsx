@@ -375,13 +375,13 @@ function DeliverySection({ order, locale, onPatch }: {
           </button>
         )}
         <FeeOwedMark order={order} locale={locale} />
-        {isPaid(order) && order.feeOwed > 0 && editing !== 'payment' && (
+        {isPaid(order) && order.feeOwed > 0 && order.stage !== CANCELLED && editing !== 'payment' && (
           <button type="button" className="text-xs px-2 py-0.5 rounded border" style={small}
             onClick={() => { setEditing('payment'); setError(''); setValue(String(toMajor(asTetri(order.feeOwed)))) }}>
             {at('wineOrders.delivery.recordPayment')}
           </button>
         )}
-        {isPaid(order) && order.feeOwed > 0 && !editing && !link && (
+        {isPaid(order) && order.feeOwed > 0 && order.stage !== CANCELLED && !editing && !link && (
           <button type="button" disabled={busy} className="text-xs px-2 py-0.5 rounded border disabled:opacity-60" style={small} onClick={makeLink}>
             {at('wineOrders.delivery.cardLink')}
           </button>
