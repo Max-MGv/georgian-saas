@@ -69,6 +69,9 @@ export async function findOpenAdminLink(
     /** Only a link for exactly this amount (tetri). Reuse asks this way: with two open links of
      *  different amounts, "the newest" is not necessarily the one being asked for. */
     amount?: number
+    /** Also count the guest's OWN checkout (no admin marker; payable for ~10 h after it was made). Used by the
+     *  Bank / Cash warning: an abandoned order is exactly an order with such a checkout still open. */
+    includeGuest?: boolean
   } = {}
 ): Promise<OpenAdminLink | null> {
   const now = opts.now ?? new Date()
@@ -79,7 +82,7 @@ export async function findOpenAdminLink(
       status: { in: ['created', 'processing'] },
       settledAt: null,
       reversedAt: null,
-      flittOrderId: { contains: ADMIN_LINK_MARKER },
+      ...(opts.includeGuest ? {} : { flittOrderId: { contains: ADMIN_LINK_MARKER } }),
       ...(opts.amount !== undefined ? { amount: opts.amount } : {}),
       // coarse cut: nothing older than the longest lifetime can be open
       createdAt: { gt: new Date(now.getTime() - SEVEN_DAYS_MS) },
@@ -88,7 +91,7 @@ export async function findOpenAdminLink(
     select: { id: true, amount: true, checkoutUrl: true, createdAt: true, flittOrderId: true },
   })
   for (const r of rows) {
-    if (!r.checkoutUrl || !isAdminLinkPayment(r.flittOrderId)) continue
+    if (!r.checkoutUrl || (!opts.includeGuest && !isAdminLinkPayment(r.flittOrderId))) continue
     const expiresAt = adminLinkExpiresAt(r.createdAt, r.flittOrderId)
     if (expiresAt > now) return { id: r.id, amount: r.amount, checkoutUrl: r.checkoutUrl, createdAt: r.createdAt, expiresAt }
   }

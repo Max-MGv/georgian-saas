@@ -62,3 +62,5 @@ release-shots/
 scripts/_qa/
 tests/_qa/
 scripts/_scratch_shot.ts
+# Playwright result output (not source)
+tests/playwright/

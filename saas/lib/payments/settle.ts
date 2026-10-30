@@ -52,6 +52,9 @@ export type SettleResult =
       // True when this settlement landed on a CANCELLED order (decided inside the settling transaction,
       // under the order's row lock). The email sender stays silent for it. False on 'already-settled'.
       afterCancellation: boolean
+      // True when THIS delivery's own verified status was 'approved' — the browser return uses it, because an
+      // 'already-settled' outcome alone cannot tell a duplicate approval from a duplicate decline.
+      approved: boolean
     }
   | { ok: false; reason: string }
 
@@ -325,6 +328,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     wineOrderId: payment.wineOrderId,
     adminLink: isAdminLinkPayment(payment.flittOrderId),
     afterCancellation: outcome === 'settled' && landedOnCancelled,
+    approved,
   }
 }
 

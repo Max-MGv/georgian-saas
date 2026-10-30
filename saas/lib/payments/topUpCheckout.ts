@@ -54,6 +54,7 @@ import { db } from '@/lib/db'
 import { balanceDue, formatTetri, type Tetri } from '@/lib/money'
 import { startCheckout } from '@/lib/payments/startCheckout'
 import { wineOrderBalance, CANCELLED_REFUSAL } from '@/lib/payments/manualPayment'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import {
   ADMIN_LINK_MARKER, ADMIN_LINK_LIFETIME_SECONDS, LINK_7D_TAG, adminLinkExpiresAt, findOpenAdminLink,
 } from '@/lib/payments/openLink'
@@ -190,10 +191,10 @@ export async function startWineTopUpCheckout(
   }
   const wine = await db.wineOrder.findFirst({
     where: { id: input.wineOrderId, tenantId: input.tenantId },
-    select: { stage: true, paidAt: true, totalAmount: true },
+    select: { stage: true, paidAt: true, totalAmount: true, deliveryFee: true },
   })
   if (!wine) return { error: 'Wine order not found.' }
-  const refused = linkRefusal({ stage: wine.stage, total: wine.totalAmount })
+  const refused = linkRefusal({ stage: wine.stage, total: wineOrderAmountDue(wine) })
   if (refused) return { error: refused }
 
   const owed = await wineOrderBalance(db, { wineOrderId: input.wineOrderId, tenantId: input.tenantId })

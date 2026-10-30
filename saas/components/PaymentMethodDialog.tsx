@@ -2,6 +2,7 @@
 
 import { Dialog } from '@base-ui/react/dialog'
 import PaymentMethodChoices from '@/components/PaymentMethodChoices'
+import { adminT } from '@/lib/adminT'
 import { getCardState, type OrderKind } from '@/components/CardPaymentFor'
 
 /**
@@ -24,7 +25,7 @@ export default function PaymentMethodDialog({ kind, id, locale, onRecord, onCard
       <Dialog.Portal>
         <Dialog.Backdrop style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)' }} />
         <Dialog.Popup
-          aria-label={locale === 'ka' ? 'როგორ გადაიხადა?' : 'How was this paid?'}
+          aria-label={adminT(locale, 'paymentMethod.howPaid')}
           style={{
             position: 'fixed', zIndex: 1001, top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             width: 'min(92vw, 320px)', maxHeight: '92vh', overflowY: 'auto',

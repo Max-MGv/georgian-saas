@@ -36,20 +36,23 @@ export type CardLink = {
 type Phase = 'loading' | 'waiting' | 'paid' | 'expired' | 'error'
 
 const POLL_MS = 3000
+/** A "paid yet?" check that has not answered after this long counts as failed. */
+const CHECK_TIMEOUT_MS = 10_000
+/** After the link expired we keep asking this many more times (one minute at 3 s). */
+const EXPIRED_GRACE_TICKS = 20
 
-export default function CardPaymentPopup({ locale, subject, start, isPaid, sendEmail, note, onPaid, onClose }: {
+export default function CardPaymentPopup({ locale, subject, start, isPaid, sendEmail, onPaid, onClose }: {
   locale: string
   subject: 'booking' | 'wine'
   /** Make or re-open the link. */
-  start: () => Promise<({ success: true } & CardLink) | { error: string }>
+  start: () => Promise<({ success: true } & CardLink) | { error: string; code?: string }>
   /** Is the order Paid yet? (read-only; asked every few seconds while waiting). */
   isPaid: () => Promise<boolean>
   /** E-mail the link to the guest. Leave out where that is not offered (wine orders for now, T-322). */
   sendEmail?: (paymentId: string) => Promise<{ success: true } | { error: string }>
-  /** An amber line above the amount (wine: "Delivery fee not set yet — this charges the wines only."). */
-  note?: string
-  /** Called once, the moment the payment is seen as confirmed. */
-  onPaid: () => void
+  /** Called once, the moment the payment is seen as confirmed — with the amount (tetri) of the link that was paid
+   *  (0 when the order turned out to be paid already and no link was involved). */
+  onPaid: (amountTetri: number) => void
   onClose: () => void
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
@@ -59,7 +62,10 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
   const [copied, setCopied] = useState(false)
   const [mailState, setMailState] = useState<'idle' | 'sending' | 'sent'>('idle')
   const [mailError, setMailError] = useState('')
+  // After several failed or hung "paid yet?" checks in a row we say so instead of waiting for ever.
+  const [pollFailed, setPollFailed] = useState(false)
   const alive = useRef(true)
+  const closing = useRef(false)
   const paidReported = useRef(false)
   const onPaidRef = useRef(onPaid)
   const startRef = useRef(start)
@@ -87,6 +93,12 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
     }
     if (!alive.current) return
     if ('error' in result) {
+      if (result.code === 'ALREADY_PAID') {
+        // Paid in the meantime (the guest used an earlier link, or another admin recorded it): not an error.
+        setPhase('paid')
+        if (!paidReported.current) { paidReported.current = true; onPaidRef.current(0) }
+        return
+      }
       setError(result.error)
       setPhase('error')
       return
@@ -110,22 +122,39 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
     void load()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // While waiting: ask whether it is paid; stop at expiry. Nothing runs in a hidden tab.
+  /** One "paid yet?" question that cannot hang: no answer within 10 s counts as a failed check. */
+  function askPaid(): Promise<boolean> {
+    return Promise.race([
+      isPaidRef.current(),
+      new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)),
+    ])
+  }
+
+  // While waiting — and for a minute after the link expires, because Flitt's confirmation can arrive seconds
+  // after a payment made just before expiry — ask whether it is paid. Nothing runs in a hidden tab.
   useEffect(() => {
-    if (phase !== 'waiting' || !link) return
+    if ((phase !== 'waiting' && phase !== 'expired') || !link) return
     let stopped = false
     let busy = false // a slow answer must not be overtaken by the next tick
+    let failures = 0
+    let ticksLeft = phase === 'expired' ? EXPIRED_GRACE_TICKS : Infinity
+    const markPaid = () => {
+      if (!alive.current) return
+      setPhase('paid')
+      if (!paidReported.current) { paidReported.current = true; onPaidRef.current(link.amount) }
+    }
     const tick = async () => {
       if (stopped || document.hidden || busy) return
+      if (ticksLeft-- <= 0) return
       busy = true
       try {
-        if (await isPaidRef.current()) {
-          if (stopped || !alive.current) return
-          setPhase('paid')
-          if (!paidReported.current) { paidReported.current = true; onPaidRef.current() }
-        }
+        // An answer that arrives after this effect was torn down (the link just expired) still counts.
+        if (await askPaid()) { markPaid(); return }
+        failures = 0
+        if (alive.current) setPollFailed(false)
       } catch {
-        // A dropped request is not an answer — try again next tick.
+        failures += 1
+        if (failures >= 5 && alive.current) setPollFailed(true)
       } finally {
         busy = false
       }
@@ -134,9 +163,16 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
     // Back in the tab after the guest paid: don't wait for the next tick.
     const onVisible = () => { if (!document.hidden) void tick() }
     document.addEventListener('visibilitychange', onVisible)
-    const left = new Date(link.expiresAt).getTime() - Date.now()
-    const expiry = setTimeout(() => { if (!stopped) setPhase('expired') }, Math.max(0, Math.min(left, 2_000_000_000)))
-    return () => { stopped = true; clearInterval(timer); clearTimeout(expiry); document.removeEventListener('visibilitychange', onVisible) }
+    let expiry: ReturnType<typeof setTimeout> | undefined
+    if (phase === 'waiting') {
+      const left = new Date(link.expiresAt).getTime() - Date.now()
+      expiry = setTimeout(async () => {
+        // One last look before saying "expired": the payment may have landed in the last seconds.
+        try { if (await askPaid()) { markPaid(); return } } catch { /* fall through to expired */ }
+        if (!stopped && alive.current) setPhase('expired')
+      }, Math.max(0, Math.min(left, 2_000_000_000)))
+    }
+    return () => { stopped = true; clearInterval(timer); if (expiry) clearTimeout(expiry); document.removeEventListener('visibilitychange', onVisible) }
   }, [phase, link])
 
   async function copy() {
@@ -162,9 +198,13 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
 
   /** Close — after one last look: a payment that landed in the last seconds must still update the page behind. */
   async function close() {
-    if (phase === 'waiting' || phase === 'expired') {
+    if (closing.current) return // Escape, the backdrop and the button must not each start a check
+    closing.current = true
+    if ((phase === 'waiting' || phase === 'expired') && !paidReported.current) {
       try {
-        if (!paidReported.current && (await isPaidRef.current())) { paidReported.current = true; onPaidRef.current() }
+        // Never longer than 2 s: closing must stay responsive even when the check hangs.
+        const paid = await Promise.race([askPaid(), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 2000))])
+        if (paid && !paidReported.current) { paidReported.current = true; onPaidRef.current(link?.amount ?? 0) }
       } catch { /* nothing to report */ }
     }
     onClose()
@@ -222,8 +262,8 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
                   <Dialog.Description className="text-xs mb-3" style={{ color: 'var(--site-secondary)' }}>
                     {phase === 'waiting' ? at('cardPay.hint') : ''}
                   </Dialog.Description>
-                  {phase === 'waiting' && (note || link.feePending) && (
-                    <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05', textAlign: 'left' }}>{note ?? at('cardPay.feeNotSet')}</p>
+                  {phase === 'waiting' && link.feePending && (
+                    <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05', textAlign: 'left' }}>{at('cardPay.feeNotSet')}</p>
                   )}
                   {phase === 'waiting' && link.reused && (
                     <p role="note" className="text-xs rounded-lg px-3 py-2 mb-3" style={{ backgroundColor: '#e4eefb', border: '1px solid #a9c3ea', color: '#1e3a6b', textAlign: 'left' }}>
@@ -243,6 +283,9 @@ export default function CardPaymentPopup({ locale, subject, start, isPaid, sendE
                   >
                     <QRCodeSVG value={link.checkoutUrl} size={200} level="M" marginSize={2} bgColor="#ffffff" fgColor="#000000" aria-hidden="true" />
                   </div>
+                  {pollFailed && phase === 'waiting' && (
+                    <p role="alert" className="text-xs rounded-lg px-3 py-2 mt-3" style={{ backgroundColor: '#fdecea', border: '1px solid #f0b4ae', color: '#8a1c16' }}>{at('cardPay.checkFailed')}</p>
+                  )}
                   <p className="text-xs mt-3 mb-1 font-semibold" style={{ color: phase === 'expired' ? '#8a1c16' : 'var(--site-text)' }}>
                     {phase === 'waiting' ? `● ${at('cardPay.waiting')}` : at('cardPay.expiredTitle')}
                   </p>

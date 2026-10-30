@@ -36,6 +36,8 @@ type OrderRef = { orderId?: string | null; wineOrderId?: string | null }
  * The same sum `balanceDue` callers use, so "mark as paid" and the balance can never disagree.
  */
 export async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
+  // Prisma drops an `undefined` filter, which would sum every order of the tenant: refuse instead.
+  if (!ref.orderId && !ref.wineOrderId) throw new Error('livePaidSum needs an order or a wine order id')
   const sum = await tx.payment.aggregate({
     where: {
       ...(ref.orderId ? { orderId: ref.orderId } : { wineOrderId: ref.wineOrderId ?? undefined }),
@@ -115,6 +117,7 @@ export async function reverseManualPayments(
   tx: TxClient,
   input: OrderRef & { at: Date }
 ): Promise<void> {
+  if (!input.orderId && !input.wineOrderId) throw new Error('reverseManualPayments needs an order or a wine order id')
   await tx.payment.updateMany({
     where: {
       ...(input.orderId ? { orderId: input.orderId } : { wineOrderId: input.wineOrderId ?? undefined }),

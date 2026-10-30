@@ -23,9 +23,12 @@ export type StatusChangeResult =
  * path treats it as true, and an unknown `kind` would fall through to "clear abandonedAt".
  * Returns an error string, or null when the change is well-formed.
  */
-export function malformedChange(change: { kind?: unknown; value?: unknown }, kinds: readonly string[]): string | null {
+export function malformedChange(change: { kind?: unknown; value?: unknown; method?: unknown }, kinds: readonly string[]): string | null {
   if (typeof change?.kind !== 'string' || !kinds.includes(change.kind)) return 'Unknown status.'
   if ((change.kind === 'paid' || change.kind === 'invoiceSent') && typeof change.value !== 'boolean') return 'Unknown status.'
+  // How it was paid is chosen from a short list; the column accepts more (CARD, MANUAL), which only a real
+  // Flitt settlement may write.
+  if (change.method !== undefined && change.method !== 'BANK_TRANSFER' && change.method !== 'CASH') return 'Unknown status.'
   return null
 }
 

@@ -26,8 +26,8 @@ export default function CardPaymentFor({ kind, id, locale, onPaid, onClose, onLi
   kind: OrderKind
   id: string
   locale: string
-  /** The payment was confirmed (the order is Paid now). */
-  onPaid: () => void
+  /** The payment was confirmed (the order is Paid now). Gets the amount (tetri) of the link that was paid. */
+  onPaid: (amountTetri: number) => void
   onClose: () => void
   /** A link was made / re-opened: lets the host show its "card link open" mark. */
   onLink?: (link: { amount: number; expiresAt: string }) => void

@@ -5,7 +5,7 @@ import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type 
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
-import { linkEmailRefusal, findOpenAdminLink } from '@/lib/payments/openLink'
+import { linkEmailRefusal, findOpenAdminLink, isAdminLinkPayment } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
@@ -639,6 +639,8 @@ export async function sendOrderInvoice(
     )
 
     if (!order) return { error: 'Order not found.' }
+    // A genuinely free booking (total set and 0 GEL, Q-12) has nothing to invoice; its menu step is gone, this is the rule.
+    if (order.totalPrice === 0) return { error: 'Nothing to pay on this booking.' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
       const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []
@@ -1108,6 +1110,8 @@ export async function recordTopUpPayment(
 ): Promise<{ success: true } | { error: string }> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
+  // Checked at runtime: the type is only a hint to the caller, and CARD / MANUAL are valid enum values too.
+  if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
 
   const result = await withTenantDb(tenantId, async tx => {
     const recorded = await recordAdditionalPayment(tx, {
@@ -1192,7 +1196,7 @@ export async function startOrderTopUpCheckout(
  */
 export async function startOrderCardPayment(orderId: string): Promise<
   | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: boolean }
-  | { error: string }
+  | { error: string; code?: 'ALREADY_PAID' }
 > {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -1206,7 +1210,7 @@ export async function startOrderCardPayment(orderId: string): Promise<
   }))
   const order = found.order
   if (!order) return { error: 'Order not found.' }
-  if (order.paidAt != null) return { error: 'This booking is already paid.' }
+  if (order.paidAt != null) return { error: 'This booking is already paid.', code: 'ALREADY_PAID' }
   const refused = linkRefusal({ stage: order.stage, total: order.totalPrice })
   if (refused) return { error: refused }
   const amount = balanceDue(order.totalPrice, found.paid)
@@ -1243,7 +1247,8 @@ export async function getOrderCardState(orderId: string): Promise<
   const tenantId = await getTenantId()
   const found = await withTenantDb(tenantId, async tx => ({
     order: await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } }),
-    open: await findOpenAdminLink(tx, { orderId }),
+    // includeGuest: the Bank / Cash warning must also cover the guest's own checkout, still payable for ~10 h.
+    open: await findOpenAdminLink(tx, { orderId }, { includeGuest: true }),
   }))
   if (!found.order) return { error: 'Order not found.' }
   return {
@@ -1282,7 +1287,8 @@ export async function sendOrderTopUpCheckoutEmail(
     where: { id: paymentId, orderId, tenantId, provider: 'flitt' },
     select: { checkoutUrl: true, amount: true, settledAt: true, createdAt: true, flittOrderId: true },
   }))
-  if (!payment || !payment.checkoutUrl) return { error: 'Checkout link not found.' }
+  // Only a card link an admin made: never the guest's own (possibly declined / old) checkout URL.
+  if (!payment || !payment.checkoutUrl || !isAdminLinkPayment(payment.flittOrderId)) return { error: 'Checkout link not found.' }
   // Never mail a link that is already paid, expired, or belongs to a cancelled order.
   const refused = linkEmailRefusal(payment, order.stage)
   if (refused) return { error: refused }

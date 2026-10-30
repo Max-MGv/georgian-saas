@@ -786,7 +786,7 @@ export default function OrderDetail({
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   // The 'paid' step swaps the menu to this picker instead of firing right
   // away, so the ledger records Bank transfer / Cash rather than a guessed
-  // MANUAL. CARD never appears here — only a real Flitt settlement sets it.
+  // MANUAL. Card does not record anything here: it opens the popup, and only a real Flitt settlement marks it paid.
   const [pickingPaymentMethod, setPickingPaymentMethod] = useState(false)
   // T-318 Chunks 5–6 — the Card step (shared components: PaymentMethodChoices, CardPaymentFor). `openLink`: a card
   // link for this booking that can still be paid — drives the "link open" mark.
@@ -1316,7 +1316,9 @@ export default function OrderDetail({
               const cfg = styleFor(displayCode)
               return (
                 <button
-                  onClick={() => setStatusMenuOpen(o => !o)}
+                  // Always back to the step list: closing the menu while the picker was showing must not leave the
+                  // picker armed for the next opening.
+                  onClick={() => { setPickingPaymentMethod(false); setStatusMenuOpen(o => !o) }}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
                 >
@@ -1325,7 +1327,7 @@ export default function OrderDetail({
               )
             })()}
             {flow.invoiceSentAt != null && flow.paidAt == null && <InvoiceSentMark locale={locale} />}
-            {openLink && flow.paidAt == null && (
+            {openLink && flow.paidAt == null && new Date(openLink.expiresAt).getTime() > Date.now() && (
               <span className="inline-flex items-center rounded-full font-semibold" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem', padding: '0.1rem 0.5rem', lineHeight: 1.5 }}>
                 {at('orders.cardLinkOpen', { date: formatLinkDay(openLink.expiresAt, locale) })}
               </span>

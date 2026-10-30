@@ -829,7 +829,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
       setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
     }
-    function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
+    // A scroll inside the menu itself (it can be taller than a short phone screen) is not the page moving.
+    function handleScroll(e: Event) {
+      if ((e.target as HTMLElement | null)?.closest?.('[data-status-menu]')) return
+      setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
+    }
     document.addEventListener('click', handleClick, true)
     document.addEventListener('scroll', handleScroll, true)
     return () => {

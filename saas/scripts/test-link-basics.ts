@@ -86,6 +86,12 @@ async function main() {
     await mk('guest', { ref: order.id, age: 1 * HOUR })
     check('expired 7-day link, 11-h-old old-style link, settled, declined and a guest checkout → none is open',
       (await findOpenAdminLink(db, { orderId: order.id })) === null)
+    // The Bank / Cash warning also counts the guest's OWN checkout (an abandoned order has exactly that, payable ~10 h).
+    const withGuest = await findOpenAdminLink(db, { orderId: order.id }, { includeGuest: true })
+    check('…but with includeGuest the guest\'s own 1-h-old checkout IS open', withGuest?.checkoutUrl.endsWith('/guest') === true, JSON.stringify(withGuest))
+    await mk('reversed', { ref: `${order.id}-topup-7d-rv-rv`, age: 1 * HOUR, reversed: true })
+    check('a REVERSED admin link is not open (default lookup)', (await findOpenAdminLink(db, { orderId: order.id })) === null)
+    await db.payment.deleteMany({ where: { providerPaymentId: `${PREFIX}-reversed` } })
 
     await mk('old2h', { ref: `${order.id}-topup-ii-jj`, age: 2 * HOUR, amount: 4000 })
     const o1 = await findOpenAdminLink(db, { orderId: order.id })

@@ -24,7 +24,9 @@ export async function POST(request: Request) {
   if (!result.ok) {
     console.error('[flitt:return] rejected —', result.reason)
     status = 'failed'
-  } else if (result.outcome === 'not-approved') {
+  } else if (result.outcome === 'not-approved' || !result.approved) {
+    // `!approved` covers 'already-settled' after a DECLINE: the server callback landed first with a decline and
+    // this return is its duplicate — it must not be shown as a success.
     status = 'failed'
   } else {
     status = 'success'

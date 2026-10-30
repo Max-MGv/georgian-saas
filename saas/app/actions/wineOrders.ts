@@ -448,7 +448,7 @@ export async function startWineOrderFeeCheckout(
  */
 export async function startWineOrderCardPayment(id: string): Promise<
   | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: false; feePending: boolean }
-  | { error: string }
+  | { error: string; code?: 'ALREADY_PAID' }
 > {
   await requireAdmin()
   const tenantId = await getTenantId()
@@ -461,7 +461,7 @@ export async function startWineOrderCardPayment(id: string): Promise<
   }))
   const order = found.order
   if (!order) return { error: 'Wine order not found.' }
-  if (order.paidAt != null) return { error: 'This wine order is already paid.' }
+  if (order.paidAt != null) return { error: 'This wine order is already paid.', code: 'ALREADY_PAID' }
   const due = wineOrderAmountDue(order)
   const refused = linkRefusal({ stage: order.stage, total: due })
   if (refused) return { error: refused }
@@ -496,7 +496,8 @@ export async function getWineOrderCardState(id: string): Promise<
   const tenantId = await getTenantId()
   const found = await withTenantDb(tenantId, async tx => ({
     order: await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } }),
-    open: await findOpenAdminLink(tx, { wineOrderId: id }),
+    // includeGuest: also the customer's own checkout, still payable for ~10 h (see getOrderCardState).
+    open: await findOpenAdminLink(tx, { wineOrderId: id }, { includeGuest: true }),
   }))
   if (!found.order) return { error: 'Wine order not found.' }
   return {

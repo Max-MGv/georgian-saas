@@ -84,6 +84,22 @@ async function main() {
     await settlePayment(signed(approved(`${PREFIX}-w2`, 1500), secret))
     check('…and 4500 of 4500 DOES', (await paidAtOf({ wineOrderId: w.id })) != null)
 
+    console.log('\nThe return page after a DECLINE\n')
+    const d = await db.order.create({
+      data: {
+        tenantId: TENANT, bookingType: 'INDIVIDUAL', visitType: 'TASTING', date: new Date('2030-08-01'), timeSlot: '12:00',
+        guestCount: 2, name: 'ZZ', surname: `${PREFIX}-d`, totalPrice: 25000, ...seedStageColumns('booking', 'NEW', ago(3_600_000)),
+      },
+    })
+    orderIds.push(d.id)
+    await pay({ orderId: d.id }, `${PREFIX}-d1`, 25000)
+    const declined = (pid: string) => ({ payment_id: pid, order_status: 'declined', amount: 25000, currency: 'GEL' })
+    const first = await settlePayment(signed(declined(`${PREFIX}-d1`), secret))
+    const again = await settlePayment(signed(declined(`${PREFIX}-d1`), secret))
+    check('the first decline is recorded and is not approved', first.ok && first.outcome === 'not-approved' && first.approved === false)
+    check('the duplicate decline is "already-settled" but still NOT approved (the return route must show failed)', again.ok && again.outcome === 'already-settled' && again.approved === false, JSON.stringify(again))
+    check('and the order was not marked Paid', (await paidAtOf({ orderId: d.id })) == null)
+
     console.log('\nControl — the guest\'s own checkout\n')
     const c = await db.order.create({
       data: {

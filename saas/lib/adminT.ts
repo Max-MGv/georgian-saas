@@ -445,6 +445,7 @@ const en: Translations = {
   'cardPay.failed': 'The link could not be made.',
   'cardPay.qrAria': 'QR code for the card payment link',
   'cardPay.feeNotSet': 'Delivery fee not set yet — this charges the wines only.',
+  'cardPay.checkFailed': 'Can’t check for the payment right now. If the guest has paid, close this and refresh the page.',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'Wine Tasting',
@@ -2068,6 +2069,7 @@ const ka: Translations = {
   'cardPay.failed': 'ბმულის შექმნა ვერ მოხერხდა.',
   'cardPay.qrAria': 'ბარათით გადახდის ბმულის QR კოდი',
   'cardPay.feeNotSet': 'მიტანის საფასური ჯერ არ არის დაყენებული — ეს მხოლოდ ღვინის თანხას მოიცავს.',
+  'cardPay.checkFailed': 'ახლა გადახდის შემოწმება ვერ ხერხდება. თუ სტუმარმა გადაიხადა, დახურეთ და განაახლეთ გვერდი.',
 
   // Orders — visit type / guest / booking type
   'orders.visit.tasting': 'ღვინის დეგუსტაცია',

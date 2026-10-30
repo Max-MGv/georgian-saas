@@ -1471,7 +1471,11 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
   // T-318 Chunk 6: the order whose "How was this paid?" dialog / Card popup is open.
   const [payFor, setPayFor] = useState<string | null>(null)
   const [cardFor, setCardFor] = useState<string | null>(null)
-  const markPaidLocally = (id: string) => setOrders(p => p.map(o => (o.id === id ? { ...o, paidAt: o.paidAt ?? new Date() } : o)))
+  // `cardPaid` too: the cancelled-order notice reads it, so cancelling this order later in the same session must
+  // still say "paid by card — refund it in Flitt" without a reload.
+  const markPaidLocally = (id: string, cardAmount = 0) => setOrders(p => p.map(o => (o.id === id
+    ? { ...o, paidAt: o.paidAt ?? new Date(), cardPaid: (o.cardPaid ?? 0) + cardAmount }
+    : o)))
   const [mode, setMode] = useState<Mode>('cards')
   const [filters, setFilters] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -1665,7 +1669,7 @@ export default function WineOrdersClient({ orders: initial, locale = 'en' }: {
         kind="wine"
         id={cardFor}
         locale={locale}
-        onPaid={() => markPaidLocally(cardFor)}
+        onPaid={amount => markPaidLocally(cardFor, amount)}
         onClose={() => setCardFor(null)}
       />
     )}
