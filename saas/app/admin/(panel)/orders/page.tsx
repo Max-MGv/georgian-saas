@@ -148,22 +148,23 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // two overlapped and the header double-counted (21 bookings reported as 31).
   // Abandoned checkouts are now excluded from the screen rather than being a
   // status on it, so there is nothing left to double-count.
-  const [stageCountRows, paidCount, invoicedCount, unpaidCount] = isTableLike
+  const [stageCountRows, paidCount, invoicedCount, unpaidCount, nothingCount] = isTableLike
     ? await withTenantDb(tenantId, async tx => [
         await tx.order.groupBy({ by: ['stage'], where: baseWhere, _count: { stage: true } }),
         await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('paid') } }),
         await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('invoiced') } }),
         await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('unpaid') } }),
+        await tx.order.count({ where: { ...baseWhere, ...paymentFilterWhere('nothing') } }),
       ] as const)
-    : [[], 0, 0, 0]
+    : [[], 0, 0, 0, 0]
   const statusCounts: Record<string, number> = {}
   for (const r of stageCountRows) statusCounts[r.stage] = r._count.stage
 
   // Counted through the same `where` fragments the filter itself uses, so a
   // pill's number and the list it produces cannot disagree. `invoiced` means
-  // invoiced and still unpaid, so the three partition the total.
+  // invoiced and still unpaid, so the four partition the total.
   const paymentCounts: Record<string, number> = {
-    paid: paidCount, invoiced: invoicedCount, unpaid: unpaidCount,
+    paid: paidCount, invoiced: invoicedCount, unpaid: unpaidCount, nothing: nothingCount,
   }
 
   const orders = isTableLike ? await withTenantDb(tenantId, tx => tx.order.findMany({

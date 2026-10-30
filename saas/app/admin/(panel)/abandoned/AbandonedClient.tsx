@@ -6,6 +6,10 @@ import { useRouter } from 'next/navigation'
 import { changeBookingStatus } from '@/app/actions/orders'
 import { changeWineOrderStatus } from '@/app/actions/wineOrders'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import PaymentMethodDialog from '@/components/PaymentMethodDialog'
+import CardPaymentFor from '@/components/CardPaymentFor'
+import type { StatusChangeResult } from '@/lib/statusRefusal'
 
 const C = {
   text: 'var(--site-text)', muted: 'var(--site-muted)', faint: 'var(--site-secondary)',
@@ -52,15 +56,12 @@ function Tab({ label, active, onClick, count }: {
  * way back, that customer's order — with their date, slot, guest count and
  * contact details already in it — would have to be typed in again by hand.
  */
-function Row({ row, locale, onRestore, onChoosePaymentMethod, busy, picking, onStartMarkPaid, onCancelPicking }: {
+function Row({ row, locale, onRestore, busy, onStartMarkPaid }: {
   row: AbandonedRow
   locale: string
   onRestore: (id: string, paid: boolean) => void
-  onChoosePaymentMethod: (id: string, method: 'BANK_TRANSFER' | 'CASH') => void
   busy: boolean
-  picking: boolean
   onStartMarkPaid: (id: string) => void
-  onCancelPicking: () => void
 }) {
   const at = (key: string, vars?: Record<string, string | number>) => adminT(locale, key, vars)
   const when = new Date(row.abandonedAt).toLocaleDateString('en-GB')
@@ -82,36 +83,7 @@ function Row({ row, locale, onRestore, onChoosePaymentMethod, busy, picking, onS
           {row.total != null && <> · {formatTetri(asTetri(row.total), { space: true })}</>}
         </p>
       </div>
-      {picking ? (
-        <div className="flex flex-col gap-1.5 flex-shrink-0" style={{ minWidth: 150 }}>
-          <p className="text-xs" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-          <button
-            onClick={() => onChoosePaymentMethod(row.id, 'BANK_TRANSFER')}
-            disabled={busy}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
-            style={{ backgroundColor: '#16a34a' }}
-          >
-            {at('paymentMethod.bankTransfer')}
-          </button>
-          <button
-            onClick={() => onChoosePaymentMethod(row.id, 'CASH')}
-            disabled={busy}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium text-white"
-            style={{ backgroundColor: '#16a34a' }}
-          >
-            {at('paymentMethod.cash')}
-          </button>
-          <button
-            onClick={onCancelPicking}
-            disabled={busy}
-            className="text-xs px-3 py-1 rounded-lg"
-            style={{ color: C.faint }}
-          >
-            {at('paymentMethod.cancel')}
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5 flex-shrink-0">
+      <div className="flex flex-col gap-1.5 flex-shrink-0">
           <button
             onClick={() => onStartMarkPaid(row.id)}
             disabled={busy}
@@ -130,8 +102,7 @@ function Row({ row, locale, onRestore, onChoosePaymentMethod, busy, picking, onS
           >
             {at('abandoned.restore')}
           </button>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -151,9 +122,14 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
   // Bank transfer / Cash choice instead of firing right away (the picker
   // "Paid" step everywhere else already asks the same question).
   const [pickingId, setPickingId] = useState<string | null>(null)
+  // T-318 Chunk 6: the row whose Card popup is open.
+  const [cardId, setCardId] = useState<string | null>(null)
+  /** Mark a row done the same way a restore does, so it fades out where it was. */
+  const fadeOut = (id: string) => setDone(prev => new Set([...prev, id]))
   const [, startTransition] = useTransition()
+  const statusNotice = useStatusNotice()
 
-  const rows = kind === 'bookings' ? bookings : wineOrders
+  const rows =kind === 'bookings' ? bookings : wineOrders
   const visible = rows.filter(r => !done.has(r.id))
 
   function restore(id: string, paid: boolean, method?: 'BANK_TRANSFER' | 'CASH') {
@@ -166,20 +142,52 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
       // `abandonedAt`, which the database requires anyway — a paid order that
       // stayed abandoned would fail the `*_abandoned_is_unpaid` constraint.
       const change = paid ? { kind: 'paid' as const, value: true, method } : { kind: 'restore' as const }
-      if (kind === 'bookings') await changeBookingStatus(id, change)
-      else await changeWineOrderStatus(id, change)
+      let result: StatusChangeResult
+      try {
+        result = kind === 'bookings' ? await changeBookingStatus(id, change) : await changeWineOrderStatus(id, change)
+      } catch {
+        // An expired session or a dropped connection rejects the call instead of returning { error }.
+        result = { error: 'Failed to update status.' }
+      }
+      // T-318: a refused change (no price) must not look done — bring the row back and say why.
+      const who = rows.find(r => r.id === id)?.who
+      if (statusNotice.report(result, kind === 'bookings' ? 'booking' : 'wine', who, id)) {
+        setDone(prev => { const n = new Set(prev); n.delete(id); return n })
+      }
       router.refresh()
     })
   }
 
   return (
     <div>
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-4" />
       <div className="flex gap-2 mb-4">
         <Tab label={at('abandoned.tab.bookings')} count={bookings.length}
           active={kind === 'bookings'} onClick={() => setKind('bookings')} />
         <Tab label={at('abandoned.tab.wine')} count={wineOrders.length}
           active={kind === 'wine'} onClick={() => setKind('wine')} />
       </div>
+
+      {pickingId && (
+        <PaymentMethodDialog
+          kind={kind === 'bookings' ? 'booking' : 'wine'}
+          id={pickingId}
+          locale={locale}
+          onRecord={method => restore(pickingId, true, method)}
+          onCard={() => { setCardId(pickingId); setPickingId(null) }}
+          onClose={() => setPickingId(null)}
+          onAlreadyPaid={() => { fadeOut(pickingId); setPickingId(null); router.refresh() }}
+        />
+      )}
+      {cardId && (
+        <CardPaymentFor
+          kind={kind === 'bookings' ? 'booking' : 'wine'}
+          id={cardId}
+          locale={locale}
+          onPaid={() => { fadeOut(cardId); router.refresh() }}
+          onClose={() => setCardId(null)}
+        />
+      )}
 
       {visible.length === 0 ? (
         <div className="rounded-xl border p-12 text-center" style={{ borderColor: C.border, backgroundColor: C.bg }}>
@@ -194,10 +202,7 @@ export default function AbandonedClient({ bookings, wineOrders, locale = 'en' }:
               locale={locale}
               busy={done.has(row.id)}
               onRestore={restore}
-              picking={pickingId === row.id}
               onStartMarkPaid={id => setPickingId(id)}
-              onCancelPicking={() => setPickingId(null)}
-              onChoosePaymentMethod={(id, method) => restore(id, true, method)}
             />
           ))}
         </div>

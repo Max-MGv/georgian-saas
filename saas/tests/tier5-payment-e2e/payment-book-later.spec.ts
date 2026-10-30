@@ -162,7 +162,9 @@ test.describe('Individual booking — reservation → invoice → manual bank tr
       const detailUrl = page.url()
       const detailPath = new URL(detailUrl).pathname
 
-      const testStartIso = new Date().toISOString()
+      // 10 s margin: Resend stamps `created_at` on ITS clock, which can read a few seconds before this machine's —
+      // a systematic skew no amount of retrying the `>=` check would ever pass (see payment-admin-order.spec.ts, same fix).
+      const testStartIso = new Date(Date.now() - 10_000).toISOString()
       const sendInvoiceBtn = page.getByRole('button', { name: 'Send Invoice', exact: true })
       await expect(sendInvoiceBtn).toBeEnabled({ timeout: 10_000 })
       await Promise.all([
@@ -209,7 +211,8 @@ test.describe('Individual booking — reservation → invoice → manual bank tr
       // await inside a try/catch (orders.ts), not settle.ts's fire-and-forget
       // pattern from Chunk 3, so this is a hard assertion, not a diagnostic.
       const resendApiKey = getResendApiKey()
-      const emails = await fetchRecentResendEmails(resendApiKey)
+      // Polled, not fetched once: the list endpoint can lag the send by a few seconds.
+      let invoiceEmail: Awaited<ReturnType<typeof fetchRecentResendEmails>>[number] | undefined
       // The marker is unique and appears in the subject regardless of send
       // locale (OrderDetail.tsx's "Send Invoice" button calls sendOrderInvoice()
       // with no locale argument, which defaults to 'ka' — a real finding: this
@@ -217,8 +220,11 @@ test.describe('Individual booking — reservation → invoice → manual bank tr
       // English-language admin UI around it), so matching on the marker itself
       // rather than a language-specific subject word is what stays correct
       // either way.
-      const invoiceEmail = findMatchingEmail(emails, email, new RegExp(marker), testStartIso)
-      expect(invoiceEmail, 'the invoice email should have reached Resend').toBeTruthy()
+      await expect(async () => {
+        const emails = await fetchRecentResendEmails(resendApiKey)
+        invoiceEmail = findMatchingEmail(emails, email, new RegExp(marker), testStartIso)
+        expect(invoiceEmail, 'the invoice email should have reached Resend').toBeTruthy()
+      }).toPass({ timeout: 20_000 })
       mark('3e checked (resend list)')
 
       // 3f. The email's actual CONTENT — not just that one went out — matches

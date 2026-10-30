@@ -294,6 +294,8 @@ const en: Translations = {
   // Online payment result page
   'payment.success_heading': 'Payment received',
   'payment.success_body': 'Thank you — your payment went through and your booking is confirmed. A confirmation has been sent to you.',
+  // After paying a card link the winery sent (T-321) — the booking already existed, no email follows.
+  'payment.link_body': 'Thank you — your payment went through.',
   // Says "not charged" because that is what a declined or abandoned Flitt
   // checkout means, and it is the first thing a worried customer wants to know.
   'payment.failed_heading': 'Payment was not completed',
@@ -587,6 +589,7 @@ const ka: Translations = {
   // Online payment result page
   'payment.success_heading': 'გადახდა მიღებულია',
   'payment.success_body': 'გმადლობთ — გადახდა წარმატებით შესრულდა და თქვენი ჯავშანი დადასტურებულია. დადასტურება გამოგზავნილია.',
+  'payment.link_body': 'გმადლობთ — გადახდა წარმატებით შესრულდა.',
   'payment.failed_heading': 'გადახდა ვერ დასრულდა',
   'payment.failed_body': 'თანხა არ ჩამოგეჭრათ. თქვენი ჯავშანი კვლავ ძალაშია — გთხოვთ დაგვიკავშირდეთ და გადახდას სხვა გზით მოვაგვარებთ.',
   'payment.pending_heading': 'მიმდინარეობს გადახდის შემოწმება',

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Card money on a cancelled order</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1160px; height: 820px">
+  <h1 class="t1">5 · Card money sitting on a cancelled order</h1>
+  <p class="sub">An old link can be paid after the order was cancelled, or a card-paid order can be cancelled afterwards. Either way the money is real and has to go back through Flitt (the app has no refund of its own). The order is <b>not</b> marked Paid; the order page says so in plain words. It is worked out from the payments themselves, so it also shows on orders that already exist. Shown on the order page and the wine order card only — not in the lists.</p>
+
+  <div class="cols">
+    <div class="col" style="width: 680px">
+      <p class="cap"><span class="tag">EN</span>Order page (desktop)</p>
+      <div class="win">
+        <h4>Giorgi Beridze</h4>
+        <p class="meta">12 Nov 2026 · 13:00 · 4 guests</p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px"><span class="pill cx">Cancelled ▾</span></div>
+        <div class="nt warn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span><b>₾250.00</b> was paid by card on this cancelled booking. Refund it in Flitt if it is due.</span>
+        </div>
+        <div class="rw" style="margin-top:8px"><span class="nm">Total</span><b>₾250.00</b></div>
+        <div class="rw"><span class="nm muted">Card · 29 Oct 2026</span><span>₾250.00</span></div>
+      </div>
+
+      <p class="cap" style="margin-top:14px"><span class="tag">KA</span>შეკვეთის გვერდი</p>
+      <div class="win">
+        <h4>გიორგი ბერიძე</h4>
+        <p class="meta">12 ნოემ. 2026 · 13:00 · 4 სტუმარი</p>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px"><span class="pill cx">გაუქმებული ▾</span></div>
+        <div class="nt warn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>ამ გაუქმებულ ჯავშანზე ბარათით გადახდილია <b>₾250.00</b>. საჭიროების შემთხვევაში დააბრუნეთ თანხა Flitt-ში.</span>
+        </div>
+        <div class="rw" style="margin-top:8px"><span class="nm">ჯამი</span><b>₾250.00</b></div>
+        <div class="rw"><span class="nm muted">ბარათი · 29 ოქტ. 2026</span><span>₾250.00</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span>Phone</p>
+      <div class="phone" style="height: 560px">
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">Giorgi Beridze</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 Nov 2026 · 13:00 · 4 guests</p>
+          <span class="pill cx">Cancelled ▾</span>
+          <div class="nt warn" style="margin-top:10px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+            <span><b>₾250.00</b> was paid by card on this cancelled booking. Refund it in Flitt if it is due.</span>
+          </div>
+          <div class="rw" style="margin-top:8px"><span class="nm">Total</span><b>₾250.00</b></div>
+          <div class="rw"><span class="nm muted">Card · 29 Oct 2026</span><span>₾250.00</span></div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:8px">Wine order card: the same sentence with “wine order”. Not shown when a cancelled order holds no card money (Bank / Cash are handled outside the app).</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1160,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

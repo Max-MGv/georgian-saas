@@ -6,6 +6,11 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { deleteOrder, updateOrder, sendOrderInvoice, changeBookingStatus } from '@/app/actions/orders'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import { revertPatch } from '@/lib/revertPatch'
+import PaymentMethodChoices from '@/components/PaymentMethodChoices'
+import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
+import { INVOICE_REFUSAL_KEY, type StatusChangeResult } from '@/lib/statusRefusal'
 import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
@@ -156,11 +161,14 @@ function menuSteps(order: Order): MenuStep[] {
     .filter(code => code !== CANCELLED)
     .map(code => ({ code, change: { kind: 'stage', stage: code } as const }))
 
+  // Nothing to collect on a booking that costs 0 ₾ (T-318 Q-12): no Invoice-sent and no Paid step.
+  const free = order.paidAt == null && order.totalPrice === 0
   // "We have asked for money" only makes sense while the money has not arrived.
-  if (order.invoiceSentAt == null && order.paidAt == null) {
+  if (order.invoiceSentAt == null && order.paidAt == null && !free) {
     steps.push({ code: 'invoiced', change: { kind: 'invoiceSent', value: true } })
   }
-  if (order.paidAt == null) {
+  // A cancelled booking cannot be marked Paid by any method (the server refuses it too).
+  if (order.paidAt == null && !free && order.stage !== CANCELLED) {
     steps.push({ code: 'paid', change: { kind: 'paid', value: true } })
   }
   if (order.stage !== CANCELLED) {
@@ -176,8 +184,7 @@ function menuSteps(order: Order): MenuStep[] {
  * restating the rules — two copies of "which columns does this change move" is
  * exactly the drift that an optimistic update hides until someone reloads.
  */
-function optimisticPatch(o: Order, change: BookingStatusChange) {
-  const now = new Date()
+function optimisticPatch(o: Order, change: BookingStatusChange, now: Date = new Date()) {
   const dates = {
     confirmedAt: o.confirmedAt ? new Date(o.confirmedAt) : null,
     finishedAt: o.completedAt ? new Date(o.completedAt) : null,
@@ -223,7 +230,7 @@ function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: s
  * financial axis has already moved off `invoiced`.
  */
 function PaymentMark({ order, locale }: {
-  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null }
+  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null; totalPrice?: number | null; stage?: string }
   locale: string
 }) {
   if (paymentStateOf(order) === 'paid') {
@@ -231,6 +238,10 @@ function PaymentMark({ order, locale }: {
   }
   if (paymentStateOf(order) === 'invoiced') {
     return <Mark label={adminT(locale, 'orders.status.invoiceSent')} glyph="✉" bg="#fef3c7" color="#92400e" />
+  }
+  // A booking that genuinely costs 0 ₾ (T-318 Q-12): quiet grey, nothing to chase.
+  if (paymentStateOf(order) === 'nothing') {
+    return <Mark label={adminT(locale, 'orders.status.nothingToPay')} glyph="₾0" bg="#eceae6" color="#6b5f51" />
   }
   return null
 }
@@ -398,6 +409,7 @@ function MobileOrderCard({ order, locale, onOpen, onStatusMenu }: {
         )}
         {pay === 'paid' && chip(`₾✓ ${at('orders.status.paid')}`, '#dcfce7', '#166534')}
         {pay === 'invoiced' && chip(at('orders.status.invoiceSent'), '#fef3c7', '#92400e')}
+        {pay === 'nothing' && chip(at('orders.status.nothingToPay'), '#eceae6', '#6b5f51')}
         {balance > 0 && chip(`⚠ ${at('orders.balanceDue')}: ${formatTetri(asTetri(balance), { decimals: true })}`, '#fef3c7', '#92400e')}
         <span className="ml-auto font-bold" style={{ color: order.totalPrice != null ? C.wine : C.faint, fontSize: '1.05rem' }}>
           {formatTetriOrDash(asTetriOrNull(order.totalPrice))}
@@ -705,6 +717,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const router = useRouter()
   const at = (key: string) => adminT(locale, key)
   const [orders, setOrders] = useState(initial)
+  const statusNotice = useStatusNotice()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingOrder, setEditingOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(false)
@@ -758,6 +771,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   // asserted rather than a guessed MANUAL. CARD is never offered here — it's
   // only ever set by a real Flitt settlement (lib/payments/settle.ts).
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
+  // T-318 Chunk 6: the booking whose Card popup is open.
+  const [cardOrderId, setCardOrderId] = useState<string | null>(null)
 
   // Hover preview
   const [hoverOrder, setHoverOrder] = useState<Order | null>(null)
@@ -773,6 +788,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [sendLocale, setSendLocale] = useState<'en' | 'ka'>('ka')
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
+  // The server's reason when it refused (no price / cancelled), as an adminT key; null = the generic failure.
+  const [emailErrorKey, setEmailErrorKey] = useState<string | null>(null)
   // Which address to actually send to (Plan-CompanyGuidesAndReps Chunk 9) — defaults to the
   // order's own email, but a company booking can pick one of its Representatives instead.
   const [recipientEmail, setRecipientEmail] = useState('')
@@ -814,7 +831,11 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
       if ((e.target as HTMLElement | null)?.closest('[data-status-menu]')) return
       setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
     }
-    function handleScroll() { setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null) }
+    // A scroll inside the menu itself (it can be taller than a short phone screen) is not the page moving.
+    function handleScroll(e: Event) {
+      if ((e.target as HTMLElement | null)?.closest?.('[data-status-menu]')) return
+      setStatusMenuId(null); setStatusMenuRect(null); setPayingOrderId(null)
+    }
     document.addEventListener('click', handleClick, true)
     document.addEventListener('scroll', handleScroll, true)
     return () => {
@@ -874,11 +895,12 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   async function handleSendEmail() {
     if (!emailOrder) return
     setEmailSending(true)
-    setEmailStatus(null)
+    setEmailStatus(null); setEmailErrorKey(null)
     const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale, recipientEmail || undefined)
     setEmailSending(false)
     if ('error' in result) {
       setEmailStatus('error')
+      setEmailErrorKey((result.code && INVOICE_REFUSAL_KEY[result.code]) || null)
     } else {
       setEmailStatus('sent')
       // Reflect the invoice date in local state. It is recorded whatever stage
@@ -923,15 +945,36 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   async function handleStatusChange(orderId: string, change: BookingStatusChange) {
     setStatusMenuId(null)
     setStatusMenuRect(null)
+    const before = orders.find(o => o.id === orderId)
+    // ONE timestamp for both the "after" snapshot and the state update below: the updater runs later, at render, and a
+    // second `new Date()` there would differ by a few ms, so revertPatch would think the field changed again and
+    // leave a refused "Paid" standing on the row (found in the 375 px check, T-318).
+    const now = new Date()
+    const after = before ? { ...before, ...optimisticPatch(before, change, now) } : undefined
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
       // Literally the same patch functions the server is about to call, so the
       // pill and the payment mark move on click instead of waiting for the
       // round trip — and the optimistic view cannot drift from the real write,
       // which is where that kind of drift would be invisible.
-      return { ...o, ...optimisticPatch(o, change) }
+      return { ...o, ...optimisticPatch(o, change, now) }
     }))
-    await changeBookingStatus(orderId, change)
+    let result: StatusChangeResult
+    try {
+      result = await changeBookingStatus(orderId, change)
+    } catch {
+      // An expired session or a dropped connection rejects the call instead of returning { error }.
+      result = { error: 'Failed to update status.' }
+    }
+    // T-318: a refused change ("Set the price first", "Nothing to pay", a failed write)
+    // used to leave the optimistic patch standing until the next refresh. Put back ONLY what this
+    // change touched, so a later change to the same row is not thrown away with it.
+    if (statusNotice.report(result, 'booking', before ? `${before.name} ${before.surname}` : '', orderId) && before && after) {
+      setOrders(prev => prev.map(o => (o.id === orderId ? revertPatch(o, before, after) : o)))
+    } else if ('success' in result && result.reopenedPaid) {
+      // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
+      setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, paidAt: new Date() } : o)))
+    }
   }
 
   // Typed HTMLElement, not HTMLButtonElement — the mobile card list's trigger is
@@ -965,6 +1008,15 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     handleStatusChange(orderId, { kind: 'paid', value: true, method })
   }
 
+  /** The Card popup confirmed a payment: show the booking as Paid (the server marked it when Flitt confirmed). */
+  function markPaidLocally(orderId: string) {
+    // The card link was for the full amount still owed, so the money received now equals the total — without this
+    // the "balance due" mark would show until the next refresh.
+    setOrders(prev => prev.map(o => (o.id === orderId
+      ? { ...o, paidAt: o.paidAt ?? new Date(), paymentsSettledTotal: o.totalPrice ?? o.paymentsSettledTotal }
+      : o)))
+  }
+
   function openEdit(order: Order) {
     setEditingOrder(order)
     setEditDate(toInputDate(order.date))
@@ -983,10 +1035,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   async function handleDelete(id: string) {
     setLoading(true)
-    await deleteOrder(id)
-    setOrders(prev => prev.filter(o => o.id !== id))
+    const result = await deleteOrder(id)
     setDeletingId(null)
     setLoading(false)
+    const gone = orders.find(o => o.id === id)
+    // A refused delete (card money / open card link) keeps the row and says why.
+    if (statusNotice.report(result, 'booking', gone ? `${gone.name} ${gone.surname}` : null, id)) return
+    setOrders(prev => prev.filter(o => o.id !== id))
   }
 
   async function handleUpdate() {
@@ -1023,6 +1078,16 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   return (
     <>
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="sticky top-2 z-30 mt-4" />
+      {cardOrderId && (
+        <CardPaymentFor
+          kind="booking"
+          id={cardOrderId}
+          locale={locale}
+          onPaid={() => markPaidLocally(cardOrderId)}
+          onClose={() => setCardOrderId(null)}
+        />
+      )}
       {/* ── Mobile card list (hidden on md+) ──────────────────── */}
       <div className="flex flex-col gap-3 mt-4 md:hidden">
         {orders.length === 0 && (
@@ -1354,12 +1419,14 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
         const vh = window.innerHeight
         // Phone (T-319): finger-sized rows (44px) and a wider menu; desktop keeps its compact 33px rows.
         const phone = vw < 768
-        const menuW = phone ? 180 : 140
+        // The "How was this paid?" picker (Bank / Cash / Card, and its open-link warning) is wider and taller than the plain step list.
+        const choosing = payingOrderId === order.id
+        const menuW = choosing ? 260 : phone ? 180 : 140
         const rowH = phone ? 44 : 33
         const steps = menuSteps(order)
         const choosingPayment = payingOrderId === order.id
-        const menuH = choosingPayment ? (phone ? 170 : 110) : steps.length * rowH + 8
-        const left = Math.min(statusMenuRect.left, vw - menuW - 8)
+        const menuH = choosingPayment ? 290 : steps.length * rowH + 8
+        const left = Math.max(8, Math.min(statusMenuRect.left, vw - menuW - 8))
         const top = statusMenuRect.bottom + 4 + menuH > vh
           ? Math.max(statusMenuRect.top - menuH - 4, 8)
           : statusMenuRect.bottom + 4
@@ -1367,27 +1434,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
           <div
             className="rounded-lg shadow-lg border py-1"
             data-status-menu
-            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, backgroundColor: 'var(--site-surface)', borderColor: C.border }}
+            style={{ position: 'fixed', top, left, zIndex: 100, minWidth: menuW, maxHeight: vh - 16, overflowY: 'auto', backgroundColor: 'var(--site-surface)', borderColor: C.border }}
             onClick={e => e.stopPropagation()}
           >
             {choosingPayment ? (
-              <div className="px-3 py-2">
-                <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-                <div className="flex flex-col gap-1">
-                  <button onClick={() => handlePaymentMethodChosen(order.id, 'BANK_TRANSFER')}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                    {at('paymentMethod.bankTransfer')}
-                  </button>
-                  <button onClick={() => handlePaymentMethodChosen(order.id, 'CASH')}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                    {at('paymentMethod.cash')}
-                  </button>
-                  <button onClick={() => setPayingOrderId(null)}
-                    className="text-left text-sm md:text-xs px-2 py-2.5 md:py-0.5" style={{ color: C.muted }}>
-                    {at('paymentMethod.cancel')}
-                  </button>
-                </div>
-              </div>
+              <PaymentMethodChoices
+                locale={locale}
+                getState={() => getCardState('booking', order.id)}
+                onRecord={method => handlePaymentMethodChosen(order.id, method)}
+                onCard={() => { setPayingOrderId(null); setStatusMenuId(null); setStatusMenuRect(null); setCardOrderId(order.id) }}
+                onCancel={() => setPayingOrderId(null)}
+                onAlreadyPaid={() => { setPayingOrderId(null); setStatusMenuId(null); setStatusMenuRect(null); markPaidLocally(order.id) }}
+              />
             ) : steps.map(step => (
               <button
                 key={step.code}
@@ -1552,7 +1610,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
                   {/* Status */}
                   {emailStatus === 'error' && (
-                    <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{at('orders.emailModal.sendFailed')}</p>
+                    <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{at(emailErrorKey ?? 'orders.emailModal.sendFailed')}</p>
                   )}
                   {emailStatus === 'sent' && (
                     <p className="text-sm mb-3" style={{ color: '#16a34a' }}>{at('orders.emailModal.sentSuccess')}</p>

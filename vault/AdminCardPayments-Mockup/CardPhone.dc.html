@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Card popup, phone</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1680px; height: 960px; padding: 32px 36px">
+  <h1 class="t1">4 · The Card popup on a phone (375 px wide)</h1>
+  <p class="sub">The admin is standing next to the guest with a phone, so this is the screen that matters most. Same popup, centred, the page behind dimmed and locked. It is sized to the screen height with its own scroll, so nothing is cut off on a short phone, and every button is at least 40 px tall. Georgian text is longer — it wraps rather than overflowing. (Real sizes get measured on the build, Rule 12.)</p>
+
+  <div class="cols" style="gap: 30px">
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span>Waiting</p>
+      <div class="phone" style="height: 800px">
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">Giorgi Beridze</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 Nov 2026 · 13:00 · 4 guests</p>
+          <span class="pill unpaid">Unpaid ▾</span>
+          <div class="flow"><i class="on"></i>New <i class="on"></i>Confirmed <i></i>Completed</div>
+          <div class="rw"><span class="nm">Total</span><b>₾250.00</b></div>
+        </div>
+        <div class="dim"></div>
+        <div class="dlg ph" style="position:absolute; left:17px; right:17px; top:72px; width:auto">
+          <p class="dt">Pay by card</p>
+          <p class="dh">Ask the guest to scan this with their phone camera.</p>
+          <div class="amt"><span>Amount to collect</span><b>₾250.00</b></div>
+          <div class="qrw"><div class="qr" role="img" aria-label="Sample QR code"></div></div>
+          <div class="st"><i class="dot"></i>Waiting for the payment…</div>
+          <p class="vu">Link valid until 5 Nov 2026, 14:30</p>
+          <div class="row"><button class="b2">Copy link</button><button class="b3">Email to guest</button></div>
+          <div class="row"><button class="b2">Open link</button><button class="b1">Close</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">KA</span>ველოდებით</p>
+      <div class="phone" style="height: 800px">
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">გიორგი ბერიძე</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 ნოემ. 2026 · 13:00 · 4 სტუმარი</p>
+          <span class="pill unpaid">გადაუხდელი ▾</span>
+          <div class="flow"><i class="on"></i>ახალი <i class="on"></i>დადასტურებული <i></i>დასრულებული</div>
+          <div class="rw"><span class="nm">ჯამი</span><b>₾250.00</b></div>
+        </div>
+        <div class="dim"></div>
+        <div class="dlg ph" style="position:absolute; left:17px; right:17px; top:72px; width:auto">
+          <p class="dt">ბარათით გადახდა</p>
+          <p class="dh">სთხოვეთ სტუმარს, დაასკანიროს ტელეფონის კამერით.</p>
+          <div class="amt"><span>გადასახდელი თანხა</span><b>₾250.00</b></div>
+          <div class="qrw"><div class="qr" role="img" aria-label="QR კოდის ნიმუში"></div></div>
+          <div class="st"><i class="dot"></i>ველოდებით გადახდას…</div>
+          <p class="vu">ბმული მოქმედებს: 5 ნოემბერი 2026, 14:30</p>
+          <div class="row"><button class="b2">ბმულის კოპირება</button><button class="b3">ელფოსტით გაგზავნა</button></div>
+          <div class="row"><button class="b2">ბმულის გახსნა</button><button class="b1">დახურვა</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span>Paid — flips by itself</p>
+      <div class="phone" style="height: 800px">
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">Giorgi Beridze</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 Nov 2026 · 13:00 · 4 guests</p>
+          <span class="pill paid">Paid ▾</span>
+          <div class="flow"><i class="on"></i>New <i class="on"></i>Confirmed <i></i>Completed</div>
+          <div class="rw"><span class="nm">Total</span><b>₾250.00</b></div>
+        </div>
+        <div class="dim"></div>
+        <div class="dlg ph" style="position:absolute; left:17px; right:17px; top:250px; width:auto">
+          <div class="ok-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <p class="dt">Paid by card</p>
+          <p class="dh">₾250.00 received. The booking is now marked <b>Paid</b>.</p>
+          <div class="row"><button class="b1">Done</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <p class="cap"><span class="tag">KA</span>გადახდილია</p>
+      <div class="phone" style="height: 800px">
+        <div class="scr">
+          <p style="margin:0 0 2px; font-weight:700">გიორგი ბერიძე</p>
+          <p class="meta" style="margin:0 0 8px; font-size:12px; color:#6b5f51">12 ნოემ. 2026 · 13:00 · 4 სტუმარი</p>
+          <span class="pill paid">გადახდილი ▾</span>
+          <div class="flow"><i class="on"></i>ახალი <i class="on"></i>დადასტურებული <i></i>დასრულებული</div>
+          <div class="rw"><span class="nm">ჯამი</span><b>₾250.00</b></div>
+        </div>
+        <div class="dim"></div>
+        <div class="dlg ph" style="position:absolute; left:17px; right:17px; top:250px; width:auto">
+          <div class="ok-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <p class="dt">გადახდილია ბარათით</p>
+          <p class="dh">მიღებულია ₾250.00. ჯავშანი აღინიშნა როგორც <b>გადახდილი</b>.</p>
+          <div class="row"><button class="b1">მზადაა</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1680,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

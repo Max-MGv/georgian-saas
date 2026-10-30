@@ -3,11 +3,12 @@
 import { db, withTenantDb } from '@/lib/db'
 import { writeOrderContacts } from '@/lib/orderContacts'
 import { isIsoDate } from '@/lib/isoDate'
-import { asTetri } from '@/lib/money'
-import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment } from '@/lib/payments/manualPayment'
+import { asTetri, balanceDue } from '@/lib/money'
+import { recordManualPayment, reverseManualPayments, recordAdditionalWinePayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { priceWineOrder } from '@/lib/winePricing'
-import { startWineTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { startWineTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
+import { findOpenAdminLink } from '@/lib/payments/openLink'
 import type { Tetri } from '@/lib/money'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { revalidatePath } from 'next/cache'
@@ -24,6 +25,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { WineOrderStatusChange } from '@/lib/statusWrite'
+import { wineMoneyRefusal, malformedChange, type StatusChangeResult } from '@/lib/statusRefusal'
 import type { WineOrderStage } from '@prisma/client'
 
 /**
@@ -37,13 +39,15 @@ import type { WineOrderStage } from '@prisma/client'
 export async function changeWineOrderStatus(
   id: string,
   change: WineOrderStatusChange
-): Promise<{ success: true } | { error: string }> {
+): Promise<StatusChangeResult> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
   // A stage arrives from a dropdown and is a string at runtime however
   // well-typed the call site looks. Postgres would refuse an invalid enum value
   // too; this turns that into a friendly error rather than a 500.
+  const malformed = malformedChange(change, ['stage', 'paid', 'restore'])
+  if (malformed) return { error: malformed }
   if (change.kind === 'stage' && !isWineOrderStage(change.stage)) {
     return { error: 'Unknown status.' }
   }
@@ -53,26 +57,39 @@ export async function changeWineOrderStatus(
     // re-stamping it — when an order was really confirmed must not drift
     // forward every time someone touches the row.
     const result = await withTenantDb(tenantId, async tx => {
+      // Row lock, as in changeBookingStatus: serialises against a settling card payment and a second click.
+      await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${id} FOR UPDATE`
       const current = await tx.wineOrder.findFirst({
         where: { id, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
         // `totalAmount` is read for the ledger row a manual payment writes (chunk 6).
         // `deliveryFee` too since T-8: "paid" means wines + delivery fee (lib/wineOrderMoney.ts).
-        select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true },
+        select: { stage: true, totalAmount: true, deliveryFee: true, confirmedAt: true, deliveredAt: true, paidAt: true, abandonedAt: true },
       })
       if (!current) return { count: 0 }
+      // Q-11: nothing priced = nothing to mark paid (a fee still "to be set" counts as 0,
+      // so wines alone are enough — Q-9). Server-side, before any write.
+      const refusal = wineMoneyRefusal(wineOrderAmountDue(current), change, current.stage)
+      if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = {
         confirmedAt: current.confirmedAt,
         finishedAt: current.deliveredAt,
         paidAt: current.paidAt,
       }
-      const data =
+      const basePatch =
         change.kind === 'stage'
           ? wineOrderStagePatch(change.stage as WineOrderStage, dates, now)
           : change.kind === 'paid'
             ? paidPatch(change.value, dates, now)
             : { abandonedAt: null }
+      // Reopening a cancelled wine order that took card money while cancelled: Paid again when the
+      // live payments cover wines + fee (T-318 Q-2) — same rule as bookings.
+      const reopensPaid =
+        change.kind === 'stage' && current.stage === 'CANCELLED' && change.stage !== 'CANCELLED'
+        && current.paidAt == null && current.abandonedAt == null
+        && await liveMoneyCovers(tx, { wineOrderId: id }, wineOrderAmountDue(current) ?? 0)
+      const data = reopensPaid ? { ...basePatch, paidAt: now } : basePatch
       const updated = await tx.wineOrder.updateMany({ where: { id, tenantId }, data })
       if (updated.count > 0) {
         if (change.kind === 'paid') {
@@ -94,13 +111,20 @@ export async function changeWineOrderStatus(
           fromStage: change.kind === 'stage' ? current.stage : null,
           toStage: change.kind === 'stage' ? change.stage : null,
         })
+        if (reopensPaid) {
+          await recordOrderEvent(tx, {
+            tenantId, wineOrderId: id, type: 'PAID', actorType: 'ADMIN', actorId: actor?.id ?? null,
+            payload: { reopenedAfterCancellation: true },
+          })
+        }
       }
-      return updated
+      return { ...updated, reopenedPaid: reopensPaid }
     })
+    if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Wine order not found.' }
     revalidatePath('/admin/wine-orders')
     revalidatePath('/admin/abandoned')
-    return { success: true }
+    return 'reopenedPaid' in result && result.reopenedPaid ? { success: true, reopenedPaid: true } : { success: true }
   } catch {
     return { error: 'Failed to update status.' }
   }
@@ -370,6 +394,9 @@ export async function recordWineOrderFeePayment(
   if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
   const tenantId = await getTenantId()
   const result = await withTenantDb(tenantId, async tx => {
+    // Same rule as bookings: a top-up is for a wine order that is already Paid and then owes more.
+    const state = await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } })
+    if (state && state.paidAt == null) return { error: 'This wine order is not paid yet — mark it as paid instead.' }
     const recorded = await recordAdditionalWinePayment(tx, {
       wineOrderId: id, tenantId, amount: data.amount, method: data.method, at: new Date(),
     })
@@ -414,6 +441,76 @@ export async function startWineOrderFeeCheckout(
   })
 }
 
+
+/**
+ * The "Card" step of "How was this paid?" for a wine order (T-318 Chunk 6): a card link for the full amount
+ * still owed — wines + delivery fee, the same figure Bank / Cash record (lib/wineOrderMoney.ts). A delivery
+ * fee still "to be set" counts as 0 (Q-9): the link charges the wines only, and the popup says so
+ * (`feePending`); when the fee is set later the existing "owes" flow collects it. Pickup orders included.
+ * Reuses an open link for the same amount. No e-mail option on wine orders for now (T-322).
+ */
+export async function startWineOrderCardPayment(id: string): Promise<
+  | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: false; feePending: boolean }
+  | { error: string; code?: 'ALREADY_PAID' }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.wineOrder.findFirst({
+      where: { id, tenantId },
+      select: { businessName: true, deliveryZoneName: true, totalAmount: true, deliveryFee: true, deliveryFeePending: true, paidAt: true, stage: true },
+    }),
+    paid: await livePaidSum(tx, { wineOrderId: id }),
+  }))
+  const order = found.order
+  if (!order) return { error: 'Wine order not found.' }
+  if (order.paidAt != null) return { error: 'This wine order is already paid.', code: 'ALREADY_PAID' }
+  const due = wineOrderAmountDue(order)
+  const refused = linkRefusal({ stage: order.stage, total: due })
+  if (refused) return { error: refused }
+  const amount = balanceDue(due, found.paid)
+  if (amount <= 0) return { error: 'There is nothing left to collect on this wine order.' }
+
+  const result = await startWineTopUpCheckout({
+    wineOrderId: id,
+    tenantId,
+    amount,
+    orderDesc: `Wine order${order.deliveryZoneName ? ` (delivery ${order.deliveryZoneName})` : ''}, ${order.businessName}`,
+  })
+  if ('error' in result) return result
+  return {
+    success: true,
+    checkoutUrl: result.checkoutUrl,
+    paymentId: result.paymentId,
+    amount,
+    expiresAt: result.expiresAt,
+    reused: result.reused === true,
+    canEmail: false,
+    feePending: order.deliveryFeePending === true,
+  }
+}
+
+/** What the Card popup polls, and what the picker asks before recording Bank / Cash — see getOrderCardState. */
+export async function getWineOrderCardState(id: string): Promise<
+  | { paid: boolean; openLink: { amount: number; expiresAt: string; declined?: boolean } | null }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } }),
+    // includeGuest: also the customer's own checkout, still payable for ~10 h; includeDeclined: a declined
+    // link can still be retried until it expires (see getOrderCardState).
+    open: await findOpenAdminLink(tx, { wineOrderId: id }, { includeGuest: true, includeDeclined: true }),
+  }))
+  if (!found.order) return { error: 'Wine order not found.' }
+  return {
+    paid: found.order.paidAt != null,
+    openLink: found.open
+      ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString(), ...(found.open.status === 'declined' ? { declined: true } : {}) }
+      : null,
+  }
+}
 
 /**
  * Change (or clear) a wine order's preferred delivery / pickup date (T-14, Chunk 7) — the winery

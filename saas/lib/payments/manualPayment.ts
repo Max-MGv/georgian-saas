@@ -26,32 +26,49 @@ import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 /** Rows this module writes, as opposed to the gateway's own. */
 const MANUAL_PROVIDER = 'manual'
 
+/** One wording for "a cancelled order takes no payment" — card links, recorded top-ups, link emails. */
+export const CANCELLED_REFUSAL = 'This order is cancelled, so it cannot take a payment.'
+
 type OrderRef = { orderId?: string | null; wineOrderId?: string | null }
 
 /**
- * Is this order already covered by a payment that counts?
- *
- * Settled and not reversed. Used to stop a second row appearing when an admin
- * toggles paid off and on again for an order the gateway already settled — the
- * card payment is still real, and a manual row beside it would double-count.
+ * What this order has already been paid: every settled, non-reversed payment (card or manual).
+ * The same sum `balanceDue` callers use, so "mark as paid" and the balance can never disagree.
  */
-async function hasLivePayment(tx: TxClient, ref: OrderRef): Promise<boolean> {
-  const found = await tx.payment.findFirst({
+export async function livePaidSum(tx: TxClient, ref: OrderRef): Promise<number> {
+  // Prisma drops an `undefined` filter, which would sum every order of the tenant: refuse instead.
+  if (!ref.orderId && !ref.wineOrderId) throw new Error('livePaidSum needs an order or a wine order id')
+  const sum = await tx.payment.aggregate({
     where: {
       ...(ref.orderId ? { orderId: ref.orderId } : { wineOrderId: ref.wineOrderId ?? undefined }),
       settledAt: { not: null },
       reversedAt: null,
     },
-    select: { id: true },
+    _sum: { amount: true },
   })
-  return found != null
+  return sum._sum.amount ?? 0
 }
 
 /**
- * Record a payment an admin marked by hand.
+ * Does the live money already on this order cover `amountDue`? (T-318 Q-2: reopening a cancelled
+ * order that took card money while it was cancelled.) False for a 0 / negative amount — "nothing
+ * to pay" is not "paid".
+ */
+export async function liveMoneyCovers(tx: TxClient, ref: OrderRef, amountDue: number): Promise<boolean> {
+  if (!(amountDue > 0)) return false
+  return (await livePaidSum(tx, ref)) >= amountDue
+}
+
+/**
+ * Record a payment an admin marked by hand: whatever is still unpaid of `amount`.
  *
- * No-op when the order already has a live payment, so this is safe to call on
- * every "mark as paid" without checking first.
+ * `amount` is the FULL amount due on the order (bookings: the total; wine: wines + fee), not what
+ * to add. The row written is the remaining balance — `amount` minus every live payment — and
+ * nothing is written once that is zero or less. So it stays safe to call on every "mark as paid"
+ * (toggling paid off and on again after a card payment never double-counts: the card payment is
+ * still real), and a part-paid order is completed with exactly the missing amount. It used to do
+ * nothing as soon as ANY payment existed, which left a part-paid order "Paid" with the ledger
+ * short (T-318 P-3, 2026-10-29).
  *
  * `method` defaults to MANUAL — the admin was not asked how the money arrived
  * — but the "Paid" picker now lets them say BANK_TRANSFER or CASH, which is
@@ -65,7 +82,8 @@ export async function recordManualPayment(
   // is what an unbranded one costs when someone wires a lari field to it.
   input: OrderRef & { tenantId: string | null; amount: Tetri; at: Date; method?: 'BANK_TRANSFER' | 'CASH' }
 ): Promise<void> {
-  if (await hasLivePayment(tx, input)) return
+  const owed = balanceDue(input.amount, await livePaidSum(tx, input))
+  if (owed <= 0) return
 
   await tx.payment.create({
     data: {
@@ -77,7 +95,7 @@ export async function recordManualPayment(
       // The gateway's verbatim string has no meaning here; this says plainly
       // where the row came from.
       status: 'recorded',
-      amount: input.amount,
+      amount: owed,
       settledAt: input.at,
     },
   })
@@ -99,6 +117,7 @@ export async function reverseManualPayments(
   tx: TxClient,
   input: OrderRef & { at: Date }
 ): Promise<void> {
+  if (!input.orderId && !input.wineOrderId) throw new Error('reverseManualPayments needs an order or a wine order id')
   await tx.payment.updateMany({
     where: {
       ...(input.orderId ? { orderId: input.orderId } : { wineOrderId: input.wineOrderId ?? undefined }),
@@ -167,9 +186,10 @@ export async function recordAdditionalPayment(
 
   const order = await tx.order.findFirst({
     where: { id: input.orderId, tenantId: input.tenantId },
-    select: { totalPrice: true },
+    select: { totalPrice: true, stage: true },
   })
   if (!order) return { error: 'Order not found.' }
+  if (order.stage === 'CANCELLED') return { error: CANCELLED_REFUSAL }
 
   const settled = await tx.payment.aggregate({
     where: { orderId: input.orderId, settledAt: { not: null }, reversedAt: null },
@@ -236,6 +256,8 @@ export async function recordAdditionalWinePayment(
   if (input.amount <= 0) return { error: 'Enter an amount greater than zero.' }
   // Same row lock as recordAdditionalPayment above (F9).
   await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${input.wineOrderId} FOR UPDATE`
+  const wine = await tx.wineOrder.findFirst({ where: { id: input.wineOrderId, tenantId: input.tenantId }, select: { stage: true } })
+  if (wine?.stage === 'CANCELLED') return { error: CANCELLED_REFUSAL }
   const owed = await wineOrderBalance(tx, input)
   if ('error' in owed) return owed
   if (input.amount > owed.balance) {

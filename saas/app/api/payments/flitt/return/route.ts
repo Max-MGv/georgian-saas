@@ -24,7 +24,9 @@ export async function POST(request: Request) {
   if (!result.ok) {
     console.error('[flitt:return] rejected —', result.reason)
     status = 'failed'
-  } else if (result.outcome === 'not-approved') {
+  } else if (result.outcome === 'not-approved' || !result.approved) {
+    // `!approved` covers 'already-settled' after a DECLINE: the server callback landed first with a decline and
+    // this return is its duplicate — it must not be shown as a success.
     status = 'failed'
   } else {
     status = 'success'
@@ -35,15 +37,20 @@ export async function POST(request: Request) {
   // here specifically because this is a real Route Handler request.
   if (result.ok && result.outcome === 'settled') {
     after(() =>
-      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId).catch(err =>
+      sendSettlementEmail(result.tenantId, result.orderId, result.wineOrderId, result.adminLink, result.afterCancellation).catch(err =>
         console.error('[flitt:return] notification failed —', err instanceof Error ? err.message : err)
       )
     )
   }
 
+  // A booking paid through a card link an admin made (T-321): that guest got no "booking
+  // confirmed" email, so the page must not promise one. Wine orders keep the usual wording for now,
+  // matching their (unchanged) receipt email. Copy only — the page never writes anything.
+  const link = status === 'success' && result.ok && result.adminLink && result.orderId ? '&kind=link' : ''
+
   // 303 so the browser follows with a GET — a 307/308 would replay the POST
   // against the result page.
-  return Response.redirect(new URL(`/payment/result?status=${status}`, request.url), 303)
+  return Response.redirect(new URL(`/payment/result?status=${status}${link}`, request.url), 303)
 }
 
 /**

@@ -32,7 +32,7 @@ import {
   isBookingStage,
   isWineOrderStage,
 } from '../lib/statusWrite'
-import { NOT_ABANDONED, ONLY_ABANDONED, paymentFilterWhere, paymentStateOf } from '../lib/orderFilters'
+import { NOT_ABANDONED, ONLY_ABANDONED, PAYMENT_FILTERS, paymentFilterWhere, paymentStateOf } from '../lib/orderFilters'
 
 const db = new PrismaClient()
 const TENANT = 'zz-test-orderstatus'
@@ -233,7 +233,7 @@ async function main() {
     console.log('\n=== I. The payment filter and the row marker agree ===')
     {
       const rows = await db.order.findMany({ where: { tenantId: TENANT, ...NOT_ABANDONED } })
-      for (const state of ['paid', 'invoiced', 'unpaid'] as const) {
+      for (const state of PAYMENT_FILTERS) {
         const viaQuery = await db.order.count({
           where: { tenantId: TENANT, ...NOT_ABANDONED, ...paymentFilterWhere(state) },
         })
@@ -242,12 +242,12 @@ async function main() {
           `query=${viaQuery} marker=${viaMarker}`)
       }
       const total = await db.order.count({ where: { tenantId: TENANT, ...NOT_ABANDONED } })
-      const sum = (await Promise.all((['paid', 'invoiced', 'unpaid'] as const).map(st =>
+      const sum = (await Promise.all(PAYMENT_FILTERS.map(st =>
         db.order.count({ where: { tenantId: TENANT, ...NOT_ABANDONED, ...paymentFilterWhere(st) } })
       ))).reduce((a, b) => a + b, 0)
       // The counts have to partition, not overlap — the old screen reported
       // 31 for 21 bookings because limbo was counted twice.
-      check('the three payment filters partition the total', sum === total, `${sum} vs ${total}`)
+      check('the four payment filters (paid / invoiced / unpaid / nothing) partition the total', sum === total, `${sum} vs ${total}`)
     }
   } finally {
     await db.order.deleteMany({ where: { tenantId: TENANT } })

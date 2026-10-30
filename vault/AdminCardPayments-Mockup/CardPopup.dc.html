@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Card popup, desktop</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1500px; height: 1800px; padding: 32px 28px">
+  <h1 class="t1">3 · The Card popup — what the admin sees after choosing “Card”</h1>
+  <p class="sub">One shared popup (built from today’s QR dialog + link panel) for every place an admin takes money. The amount is the full amount still owed — it is not editable, exactly like Bank / Cash. The popup checks every few seconds and flips to “Paid” by itself when Flitt confirms, then the page behind refreshes. Closing it does not cancel anything: the link stays valid until the date shown.</p>
+
+  <p class="cap"><span class="tag">EN</span>Booking · four states</p>
+  <div class="cols" style="gap: 20px">
+    <div class="col">
+      <p class="cap">a · Waiting</p>
+      <div class="dlg">
+        <p class="dt">Pay by card</p>
+        <p class="dh">Ask the guest to scan this with their phone camera.</p>
+        <div class="amt"><span>Amount to collect</span><b>₾250.00</b></div>
+        <div class="qrw"><div class="qr" role="img" aria-label="Sample QR code"></div></div>
+        <p class="sq">sample picture — not a real code</p>
+        <div class="st"><i class="dot"></i>Waiting for the payment…</div>
+        <p class="vu">Link valid until 5 Nov 2026, 14:30</p>
+        <div class="row"><button class="b2">Copy link</button><button class="b3">Email to guest</button></div>
+        <div class="row"><button class="b2">Open link</button><button class="b1">Close</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">b · Paid (appears by itself)</p>
+      <div class="dlg">
+        <div class="ok-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <p class="dt">Paid by card</p>
+        <p class="dh">₾250.00 received. The booking is now marked <b>Paid</b>.</p>
+        <div class="row"><button class="b1">Done</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">c · A link is already open</p>
+      <div class="dlg">
+        <p class="dt">Pay by card</p>
+        <div class="nt info" style="margin: 0 0 12px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          <span>A link for ₾250.00 is already open — this is the same one, not a new one.</span>
+        </div>
+        <div class="qrw"><div class="qr" role="img" aria-label="Sample QR code"></div></div>
+        <div class="st"><i class="dot"></i>Waiting for the payment…</div>
+        <p class="vu">Link valid until 5 Nov 2026, 14:30</p>
+        <div class="row"><button class="b2">Copy link</button><button class="b3">Email to guest</button></div>
+        <div class="row"><button class="b2">Open link</button><button class="b1">Close</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">d · The link has expired</p>
+      <div class="dlg">
+        <p class="dt">Pay by card</p>
+        <div class="qrw"><div class="qr dead" role="img" aria-label="Expired QR code"></div></div>
+        <div class="st bad"><i class="dot"></i>This link has expired</div>
+        <p class="vu">It stopped working on 5 Nov 2026, 14:30. Make a new one to collect ₾250.00.</p>
+        <div class="row"><button class="b3">Make a new link</button><button class="b1">Close</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <p class="cap"><span class="tag">KA</span>დაჯავშნა · ოთხი მდგომარეობა (სამუშაო ტექსტი)</p>
+  <div class="cols" style="gap: 20px">
+    <div class="col">
+      <p class="cap">a · ველოდებით</p>
+      <div class="dlg">
+        <p class="dt">ბარათით გადახდა</p>
+        <p class="dh">სთხოვეთ სტუმარს, დაასკანიროს ტელეფონის კამერით.</p>
+        <div class="amt"><span>გადასახდელი თანხა</span><b>₾250.00</b></div>
+        <div class="qrw"><div class="qr" role="img" aria-label="QR კოდის ნიმუში"></div></div>
+        <p class="sq">ნიმუში — არა რეალური კოდი</p>
+        <div class="st"><i class="dot"></i>ველოდებით გადახდას…</div>
+        <p class="vu">ბმული მოქმედებს: 5 ნოემბერი 2026, 14:30</p>
+        <div class="row"><button class="b2">ბმულის კოპირება</button><button class="b3">ელფოსტით გაგზავნა</button></div>
+        <div class="row"><button class="b2">ბმულის გახსნა</button><button class="b1">დახურვა</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">b · გადახდილია</p>
+      <div class="dlg">
+        <div class="ok-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <p class="dt">გადახდილია ბარათით</p>
+        <p class="dh">მიღებულია ₾250.00. ჯავშანი აღინიშნა როგორც <b>გადახდილი</b>.</p>
+        <div class="row"><button class="b1">მზადაა</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">c · ბმული უკვე ღიაა</p>
+      <div class="dlg">
+        <p class="dt">ბარათით გადახდა</p>
+        <div class="nt info" style="margin: 0 0 12px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          <span>₾250.00-ის ბმული უკვე ღიაა — ეს იგივეა, ახალი არ შექმნილა.</span>
+        </div>
+        <div class="qrw"><div class="qr" role="img" aria-label="QR კოდის ნიმუში"></div></div>
+        <div class="st"><i class="dot"></i>ველოდებით გადახდას…</div>
+        <p class="vu">ბმული მოქმედებს: 5 ნოემბერი 2026, 14:30</p>
+        <div class="row"><button class="b2">ბმულის კოპირება</button><button class="b3">ელფოსტით გაგზავნა</button></div>
+        <div class="row"><button class="b2">ბმულის გახსნა</button><button class="b1">დახურვა</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap">d · ბმულს ვადა გაუვიდა</p>
+      <div class="dlg">
+        <p class="dt">ბარათით გადახდა</p>
+        <div class="qrw"><div class="qr dead" role="img" aria-label="ვადაგასული QR კოდი"></div></div>
+        <div class="st bad"><i class="dot"></i>ბმულს ვადა გაუვიდა</div>
+        <p class="vu">გაჩერდა 5 ნოემბერი 2026, 14:30. შექმენით ახალი ₾250.00-ის მისაღებად.</p>
+        <div class="row"><button class="b3">ახალი ბმულის შექმნა</button><button class="b1">დახურვა</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sep"></div>
+
+  <p class="cap">Wine order — delivery fee not set yet (and pickup orders)</p>
+  <div class="cols" style="gap: 20px">
+    <div class="col">
+      <p class="cap"><span class="tag">EN</span></p>
+      <div class="dlg">
+        <p class="dt">Pay by card</p>
+        <div class="nt warn" style="margin: 0 0 12px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>Delivery fee not set yet — this charges the wines only.</span>
+        </div>
+        <div class="amt"><span>Amount to collect</span><b>₾300.00</b></div>
+        <div class="qrw"><div class="qr" role="img" aria-label="Sample QR code"></div></div>
+        <div class="st"><i class="dot"></i>Waiting for the payment…</div>
+        <p class="vu">Link valid until 5 Nov 2026, 14:30</p>
+        <div class="row"><button class="b2">Copy link</button><button class="b2">Open link</button><button class="b1">Close</button></div>
+      </div>
+    </div>
+    <div class="col">
+      <p class="cap"><span class="tag">KA</span></p>
+      <div class="dlg">
+        <p class="dt">ბარათით გადახდა</p>
+        <div class="nt warn" style="margin: 0 0 12px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+          <span>მიწოდების ღირებულება ჯერ არ არის დაყენებული — ეს მხოლოდ ღვინოს ჩამოჭრის.</span>
+        </div>
+        <div class="amt"><span>გადასახდელი თანხა</span><b>₾300.00</b></div>
+        <div class="qrw"><div class="qr" role="img" aria-label="QR კოდის ნიმუში"></div></div>
+        <div class="st"><i class="dot"></i>ველოდებით გადახდას…</div>
+        <p class="vu">ბმული მოქმედებს: 5 ნოემბერი 2026, 14:30</p>
+        <div class="row"><button class="b2">ბმულის კოპირება</button><button class="b2">ბმულის გახსნა</button><button class="b1">დახურვა</button></div>
+      </div>
+    </div>
+    <div class="col" style="width: 360px">
+      <p class="cap">Notes</p>
+      <p class="note">Wine orders have <b>no “Email to guest” button</b> for now (decided; recorded as T-322 to revisit).</p>
+      <p class="note">When the fee is set later, today’s “owes ₾X” + fee link collects it — nothing new.</p>
+      <p class="note">Pickup orders: same popup without any fee line.</p>
+      <p class="note">If a booking has <b>no price</b>, or the order is <b>cancelled</b>, Card is not offered: the menu shows “Set the price first.” (board 6) instead.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

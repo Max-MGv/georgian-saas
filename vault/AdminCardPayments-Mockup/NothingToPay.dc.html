@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nothing to pay</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div class="pg" style="width: 1100px; height: 760px">
+  <h1 class="t1">7 · “Nothing to pay” — a booking that genuinely costs 0 ₾</h1>
+  <p class="sub">All guests free, a partner visit. Marking it Paid is refused (board 6) and “Unpaid” would be a lie that sits in the Unpaid filter forever. So a booking whose total <b>is set and is 0 ₾</b> gets its own quiet grey state. Not set (no price yet) is different: that one says “Set the price first”. Bookings only — a wine order always has priced wines.</p>
+
+  <p class="cap">The four payment states</p>
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px">
+    <span class="tag">EN</span>
+    <span class="pill unpaid">Unpaid</span><span class="pill inv">Invoice sent</span><span class="pill paid">Paid</span><span class="pill nil">Nothing to pay</span>
+  </div>
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:24px">
+    <span class="tag">KA</span>
+    <span class="pill unpaid">გადაუხდელი</span><span class="pill inv">ინვოისი გაგზავნილია</span><span class="pill paid">გადახდილი</span><span class="pill nil">გადასახდელი არ არის</span>
+  </div>
+
+  <div class="cols">
+    <div class="col" style="width: 560px">
+      <p class="cap">In the list</p>
+      <div class="win" style="padding: 8px 4px">
+        <div class="rw"><span class="nm">Partner visit — Kakheti Tours<br><span class="sm">15 Nov 2026 · 11:00 · 6 guests, all free</span></span><span class="pill nil">Nothing to pay ▾</span><b>₾0.00</b></div>
+        <div class="rw"><span class="nm">Giorgi Beridze<br><span class="sm">12 Nov 2026 · 13:00</span></span><span class="pill unpaid">Unpaid ▾</span><b>₾250.00</b></div>
+        <div class="rw"><span class="nm">Nino Kapanadze<br><span class="sm">13 Nov 2026 · 15:00</span></span><span class="pill paid">Paid ▾</span><b>₾480.00</b></div>
+      </div>
+      <p class="note" style="margin-top:8px; max-width: 540px">Phone cards, the calendar and the order page use the same pill. A 0 ₾ booking that was marked Paid in the past stays Paid — history is not rewritten.</p>
+    </div>
+
+    <div class="col">
+      <p class="cap">Its status menu</p>
+      <div class="menu">
+        <p class="q">Change status</p>
+        <button class="mb out" style="color:#2a2018; border-color:#cfc3ae">New</button>
+        <button class="mb out" style="color:#2a2018; border-color:#cfc3ae">Confirmed</button>
+        <button class="mb out" style="color:#2a2018; border-color:#cfc3ae">Completed</button>
+        <button class="mb out" style="color:#2a2018; border-color:#cfc3ae">Cancelled</button>
+      </div>
+      <p class="note">No “Paid” step and no “Invoice sent” for it — there is nothing to collect. (Illustrative menu; the real one lists today’s steps.)</p>
+    </div>
+
+    <div class="col">
+      <p class="cap">Filters and counts</p>
+      <div class="win" style="width: 230px">
+        <div class="rw" style="padding:6px 0"><span class="nm">Unpaid</span><span class="cnt">5</span></div>
+        <div class="rw" style="padding:6px 0"><span class="nm">Invoice sent</span><span class="cnt">2</span></div>
+        <div class="rw" style="padding:6px 0"><span class="nm">Paid</span><span class="cnt">31</span></div>
+        <div class="rw" style="padding:6px 0"><span class="nm muted">Nothing to pay</span><span class="cnt" style="background:#6b5f51">1</span></div>
+      </div>
+      <p class="note">Example numbers. “Nothing to pay” is not counted in Unpaid or Invoice sent, and is not owed in Statistics, CSV or invoices.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

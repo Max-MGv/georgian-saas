@@ -3,8 +3,9 @@
 import { db, withTenantDb, type TxClient } from '@/lib/db'
 import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type OrderContactView } from '@/lib/orderContacts'
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
-import { recordManualPayment, reverseManualPayments, recordAdditionalPayment } from '@/lib/payments/manualPayment'
-import { startTopUpCheckout } from '@/lib/payments/topUpCheckout'
+import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
+import { startTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
+import { linkEmailRefusal, findOpenAdminLink, isAdminLinkPayment, adminLinkLockKey, cardTrailDeleteRefusal } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
@@ -34,15 +35,27 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
-import { NOT_ABANDONED, paymentFilterWhere } from '@/lib/orderFilters'
+import { bookingMoneyRefusal, malformedChange, type StatusChangeResult, type StatusRefusalCode } from '@/lib/statusRefusal'
+import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
-export async function deleteOrder(id: string) {
+export async function deleteOrder(id: string): Promise<StatusChangeResult> {
   await requireAdmin()
+  // A crafted object here would become a Prisma filter and could match every order of the tenant.
+  if (typeof id !== 'string' || !id) return { error: 'Order not found.' }
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx => tx.order.deleteMany({ where: { id, tenantId } }))
+  const refusal = await withTenantDb(tenantId, async tx => {
+    // The same lock card-link creation takes: a link being made at this moment is either seen below or waits
+    // for this delete (and then finds no order) — never created for an order that is already gone.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${adminLinkLockKey({ orderId: id })}))`
+    const why = await cardTrailDeleteRefusal(tx, { orderId: id })
+    if (why) return why
+    await tx.order.deleteMany({ where: { id, tenantId } })
+    return null
+  })
+  if (refusal) return { error: refusal, code: 'CARD_TRAIL' }
   revalidatePath('/admin/orders')
   revalidatePath('/admin/statistics')
   return { success: true }
@@ -611,7 +624,7 @@ export async function sendOrderInvoice(
   // (Plan-ContactRoles Chunk 11) — falls back to order.email when omitted. Re-checked against
   // lib/contactResolution.ts's invoiceRecipientsFor() below, not trusted as-is.
   recipientEmail?: string
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true } | { error: string; code?: StatusRefusalCode }> {
   await requireAdmin()
   const tenantId = await getTenantId()
   try {
@@ -637,6 +650,11 @@ export async function sendOrderInvoice(
     )
 
     if (!order) return { error: 'Order not found.' }
+    // A genuinely free booking (total set and 0 GEL, Q-12) has nothing to invoice; its menu step is gone, this is the rule.
+    if (order.totalPrice === 0) return { error: 'Nothing to pay on this booking.', code: 'NOTHING_TO_PAY' }
+    // An unpriced booking would be invoiced as 0 ₾, and a cancelled one asks for money that is no longer owed.
+    if (order.totalPrice == null) return { error: 'This booking has no price yet — set the price before sending an invoice.', code: 'NO_PRICE' }
+    if (order.stage === 'CANCELLED') return { error: 'This booking is cancelled, so no invoice can be sent. Reopen it first.', code: 'CANCELLED' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
       const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []
@@ -850,7 +868,8 @@ export async function exportOrdersCsv(filters: {
     toMajor(asTetri(sumWineLines(o.wineLines))),
     o.paidAt && balance !== 0 ? toMajor(balance) : '',
     o.stage,
-    o.paidAt ? 'paid' : o.invoiceSentAt ? 'invoiced' : 'unpaid',
+    // 'nothing' = a 0 GEL booking (T-318 Q-12): not owed, so not 'unpaid' in an accountant's sheet either.
+    paymentStateOf(o) === 'nothing' ? 'nothing to pay' : paymentStateOf(o),
     o.paidAt ? o.paidAt.toLocaleDateString('en-GB') : '',
     o.invoiceSentAt ? o.invoiceSentAt.toLocaleDateString('en-GB') : '',
     o.email ?? '',
@@ -986,7 +1005,7 @@ function toCurrentDates(o: {
 export async function changeBookingStatus(
   orderId: string,
   change: BookingStatusChange
-): Promise<{ success: true } | { error: string }> {
+): Promise<StatusChangeResult> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
 
@@ -994,6 +1013,8 @@ export async function changeBookingStatus(
   // redesign was opened for was an unvalidated `status: string` that neither
   // the app nor the database rejected; a stage arriving from a dropdown is
   // still a string at runtime however well-typed the call site looks.
+  const malformed = malformedChange(change, ['stage', 'paid', 'invoiceSent', 'restore'])
+  if (malformed) return { error: malformed }
   if (change.kind === 'stage' && !isBookingStage(change.stage)) {
     return { error: 'Unknown status.' }
   }
@@ -1003,16 +1024,25 @@ export async function changeBookingStatus(
     // re-stamping it — the moment an order was really confirmed must not drift
     // forward every time someone touches the row.
     const result = await withTenantDb(tenantId, async tx => {
+      // Lock the row for this transaction (same as recordAdditionalPayment): a card payment settling
+      // at the same moment, or a second admin click, is then checked one after the other against the
+      // money already on the ledger instead of both reading the same sum.
+      await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`
       const current = await tx.order.findFirst({
         where: { id: orderId, tenantId },
         // `stage` is selected for the history row's fromStage, not for the patch.
         // `totalPrice` is read for the ledger row a manual payment writes (chunk 6).
-        select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true },
+        select: { stage: true, totalPrice: true, confirmedAt: true, completedAt: true, invoiceSentAt: true, paidAt: true, abandonedAt: true },
       })
       if (!current) return { count: 0 }
+      // Q-11 / Q-12: no price, or a genuinely free booking, cannot be marked paid or
+      // invoiced by any method. Checked on the server before any write — a hidden
+      // button is not a rule.
+      const refusal = bookingMoneyRefusal(current.totalPrice, change, current.stage)
+      if (refusal) return { count: 0, refusal }
       const now = new Date()
       const dates = toCurrentDates(current)
-      const data =
+      const basePatch =
         change.kind === 'stage'
           ? bookingStagePatch(change.stage as BookingStage, dates, now)
           : change.kind === 'paid'
@@ -1020,6 +1050,15 @@ export async function changeBookingStatus(
             : change.kind === 'invoiceSent'
               ? invoiceSentPatch(change.value, dates, now)
               : { abandonedAt: null }
+      // Reopening a cancelled order that took card money while cancelled (an old link paid late —
+      // T-318 Q-2): settlement refused to mark it Paid then, so it would show Unpaid with the money
+      // on file. If the live payments cover the total, it is Paid again. `paidAt` only; the stage is
+      // whatever the admin chose. Never touches an abandoned row (its own constraint).
+      const reopensPaid =
+        change.kind === 'stage' && current.stage === 'CANCELLED' && change.stage !== 'CANCELLED'
+        && current.paidAt == null && current.abandonedAt == null
+        && await liveMoneyCovers(tx, { orderId }, current.totalPrice ?? 0)
+      const data = reopensPaid ? { ...basePatch, paidAt: now } : basePatch
       const updated = await tx.order.updateMany({ where: { id: orderId, tenantId }, data })
       if (updated.count > 0) {
         // Every payment is a ledger row now, whatever channel it arrived
@@ -1045,14 +1084,22 @@ export async function changeBookingStatus(
           fromStage: change.kind === 'stage' ? current.stage : null,
           toStage: change.kind === 'stage' ? change.stage : null,
         })
+        // The reopen also made the order Paid: say so on the timeline too (not only the stage move).
+        if (reopensPaid) {
+          await recordOrderEvent(tx, {
+            tenantId, orderId, type: 'PAID', actorType: 'ADMIN', actorId: actor?.id ?? null,
+            payload: { reopenedAfterCancellation: true },
+          })
+        }
       }
-      return updated
+      return { ...updated, reopenedPaid: reopensPaid }
     })
+    if ('refusal' in result && result.refusal) return result.refusal
     if (result.count === 0) return { error: 'Order not found.' }
     revalidatePath('/admin/orders')
     revalidatePath(`/admin/orders/${orderId}`)
     revalidatePath('/admin/abandoned')
-    return { success: true }
+    return 'reopenedPaid' in result && result.reopenedPaid ? { success: true, reopenedPaid: true } : { success: true }
   } catch {
     return { error: 'Failed to update status.' }
   }
@@ -1077,8 +1124,14 @@ export async function recordTopUpPayment(
 ): Promise<{ success: true } | { error: string }> {
   const actor = await requireAdmin()
   const tenantId = await getTenantId()
+  // Checked at runtime: the type is only a hint to the caller, and CARD / MANUAL are valid enum values too.
+  if (data.method !== 'BANK_TRANSFER' && data.method !== 'CASH') return { error: 'Choose how it was paid.' }
 
   const result = await withTenantDb(tenantId, async tx => {
+    // A top-up is for an order that is already Paid and then owes more. On an unpaid one it would put the full
+    // amount on the ledger yet leave the order Unpaid; "Mark as paid" is the way to settle those.
+    const state = await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } })
+    if (state && state.paidAt == null) return { error: 'This booking is not paid yet — mark it as paid instead.' }
     const recorded = await recordAdditionalPayment(tx, {
       orderId,
       tenantId,
@@ -1152,6 +1205,80 @@ export async function startOrderTopUpCheckout(
 }
 
 /**
+ * The "Card" step of "How was this paid?" (T-318 Chunk 5): a card link for the FULL amount still owed on an
+ * unpaid booking — not editable, exactly like Bank / Cash. Asking again while a link for that amount is
+ * open hands the same link back (`reused`). Returns what the popup shows: the link, when it stops working,
+ * the amount, and whether the guest has an email address to send it to.
+ *
+ * The order only turns Paid when Flitt confirms (settle.ts) — nothing is marked here.
+ */
+export async function startOrderCardPayment(orderId: string): Promise<
+  | { success: true; checkoutUrl: string; paymentId: string; amount: number; expiresAt: string; reused: boolean; canEmail: boolean }
+  | { error: string; code?: 'ALREADY_PAID' }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { name: true, surname: true, date: true, timeSlot: true, email: true, totalPrice: true, paidAt: true, stage: true },
+    }),
+    paid: await livePaidSum(tx, { orderId }),
+  }))
+  const order = found.order
+  if (!order) return { error: 'Order not found.' }
+  if (order.paidAt != null) return { error: 'This booking is already paid.', code: 'ALREADY_PAID' }
+  const refused = linkRefusal({ stage: order.stage, total: order.totalPrice })
+  if (refused) return { error: refused }
+  const amount = balanceDue(order.totalPrice, found.paid)
+  if (amount <= 0) return { error: 'There is nothing left to collect on this booking.' }
+
+  const result = await startTopUpCheckout({
+    orderId,
+    tenantId,
+    amount,
+    orderDesc: `Card payment, ${order.name} ${order.surname}, ${order.date.toLocaleDateString('en-GB')} ${order.timeSlot}`,
+  })
+  if ('error' in result) return result
+  return {
+    success: true,
+    checkoutUrl: result.checkoutUrl,
+    paymentId: result.paymentId,
+    amount,
+    expiresAt: result.expiresAt,
+    reused: result.reused === true,
+    canEmail: Boolean(order.email),
+  }
+}
+
+/**
+ * What the Card popup polls (every few seconds while open) and what the picker asks before recording
+ * Bank / Cash: is the booking Paid yet, and is a card link still open (so the admin can be warned that
+ * the guest could still pay it — a link cannot be cancelled). Read-only.
+ */
+export async function getOrderCardState(orderId: string): Promise<
+  | { paid: boolean; openLink: { amount: number; expiresAt: string; declined?: boolean } | null }
+  | { error: string }
+> {
+  await requireAdmin()
+  const tenantId = await getTenantId()
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } }),
+    // includeGuest: the Bank / Cash warning must also cover the guest's own checkout, still payable for ~10 h.
+    // includeDeclined: after a decline Flitt lets the guest retry on the same link until it expires.
+    open: await findOpenAdminLink(tx, { orderId }, { includeGuest: true, includeDeclined: true }),
+  }))
+  if (!found.order) return { error: 'Order not found.' }
+  return {
+    paid: found.order.paidAt != null,
+    openLink: found.open
+      ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString(), ...(found.open.status === 'declined' ? { declined: true } : {}) }
+      : null,
+  }
+}
+
+/**
  * Email a previously-generated top-up checkout link to the guest (Plan-
  * PostPaymentExtras Chunk 4) — reuses the existing email-sending
  * infrastructure the same way `sendOrderInvoice` does (same sender config
@@ -1170,18 +1297,26 @@ export async function sendOrderTopUpCheckoutEmail(
   await requireAdmin()
   const tenantId = await getTenantId()
 
-  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
-    where: { id: orderId, tenantId },
-    select: { name: true, surname: true, email: true, date: true, timeSlot: true },
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { name: true, surname: true, email: true, date: true, timeSlot: true, stage: true, totalPrice: true },
+    }),
+    paid: await livePaidSum(tx, { orderId }),
   }))
+  const order = found.order
   if (!order) return { error: 'Order not found.' }
   if (!order.email) return { error: 'This order has no email address.' }
 
   const payment = await withTenantDb(tenantId, tx => tx.payment.findFirst({
     where: { id: paymentId, orderId, tenantId, provider: 'flitt' },
-    select: { checkoutUrl: true, amount: true },
+    select: { checkoutUrl: true, amount: true, settledAt: true, createdAt: true, flittOrderId: true },
   }))
-  if (!payment || !payment.checkoutUrl) return { error: 'Checkout link not found.' }
+  // Only a card link an admin made: never the guest's own (possibly declined / old) checkout URL.
+  if (!payment || !payment.checkoutUrl || !isAdminLinkPayment(payment.flittOrderId)) return { error: 'Checkout link not found.' }
+  // Never mail a link that is already paid, expired, or belongs to a cancelled order.
+  const refused = linkEmailRefusal(payment, order.stage, new Date(), balanceDue(order.totalPrice, found.paid))
+  if (refused) return { error: refused }
 
   const [wineryAddress, wineryEmail, tenant] = await Promise.all([
     getSetting('contact_address'),

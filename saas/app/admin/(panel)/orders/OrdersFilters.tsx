@@ -36,6 +36,7 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   unpaid: 'orders.status.unpaid',
   invoiced: 'orders.status.invoiceSent',
   paid: 'orders.status.paid',
+  nothing: 'orders.status.nothingToPay',
 }
 
 type Props = {

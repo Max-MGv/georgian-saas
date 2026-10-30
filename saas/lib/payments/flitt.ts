@@ -59,6 +59,12 @@ export type CreateCheckoutInput = {
   responseUrl: string
   serverCallbackUrl: string
   lang?: string
+  /**
+   * How long the checkout link stays payable, in seconds. Flitt's default is 36000 (10 h) and its
+   * maximum 69 120 000; omitted, the default applies — which is what the guest's own checkout at
+   * booking time keeps. Admin card links ask for 7 days (T-318 Q-4).
+   */
+  lifetime?: number
   /** Free-form string echoed back on the callback; we use it to carry tenantId. */
   merchantData?: string
 }
@@ -193,6 +199,7 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<Create
   // so their absence is a legitimate state — unlike the required keys above,
   // where absence means we built a bad request.
   if (input.lang) params.lang = input.lang
+  if (input.lifetime && Number.isInteger(input.lifetime) && input.lifetime > 0) params.lifetime = String(input.lifetime)
   if (input.merchantData) params.merchant_data = input.merchantData
 
   for (const key of REQUIRED_PARAM_KEYS) {

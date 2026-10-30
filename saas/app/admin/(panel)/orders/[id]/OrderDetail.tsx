@@ -23,6 +23,13 @@ import { addOrderExtra, removeOrderExtra, updateOrderExtra } from '@/app/actions
 import { UNIT_LABELS } from '@/lib/masterclass'
 import type { MasterclassUnit } from '@/lib/masterclass'
 import { adminT } from '@/lib/adminT'
+import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
+import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
+import { revertPatch } from '@/lib/revertPatch'
+import { formatLinkDay, formatLinkMoment } from '@/lib/formatLinkMoment'
+import PaymentMethodChoices from '@/components/PaymentMethodChoices'
+import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
+import { INVOICE_REFUSAL_KEY, type StatusChangeResult } from '@/lib/statusRefusal'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -775,11 +782,16 @@ export default function OrderDetail({
     invoiceSentAt: order.invoiceSentAt,
     paidAt: order.paidAt,
   })
+  const statusNotice = useStatusNotice()
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   // The 'paid' step swaps the menu to this picker instead of firing right
   // away, so the ledger records Bank transfer / Cash rather than a guessed
-  // MANUAL. CARD never appears here — only a real Flitt settlement sets it.
+  // MANUAL. Card does not record anything here: it opens the popup, and only a real Flitt settlement marks it paid.
   const [pickingPaymentMethod, setPickingPaymentMethod] = useState(false)
+  // T-318 Chunks 5–6 — the Card step (shared components: PaymentMethodChoices, CardPaymentFor). `openLink`: a card
+  // link for this booking that can still be paid — drives the "link open" mark.
+  const [cardPopup, setCardPopup] = useState(false)
+  const [openLink, setOpenLink] = useState<{ amount: number; expiresAt: string; declined?: boolean } | null>(null)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
   const [printReady, setPrintReady] = useState(false)
@@ -827,8 +839,8 @@ export default function OrderDetail({
    * functions the server action calls rather than restating the rules - two
    * copies of "which columns does this move" is where drift hides.
    */
-  function applyLocally(change: BookingStatusChange) {
-    setFlow(prev => {
+  function flowAfter(prev: FlowState, change: BookingStatusChange): FlowState {
+    {
       const now = new Date()
       const dates = {
         confirmedAt: prev.confirmedAt ? new Date(prev.confirmedAt) : null,
@@ -853,13 +865,29 @@ export default function OrderDetail({
         case 'restore':
           return prev
       }
-    })
+    }
+  }
+
+  function applyLocally(change: BookingStatusChange) {
+    setFlow(prev => flowAfter(prev, change))
   }
 
   async function handleStatusChange(change: BookingStatusChange) {
     setStatusMenuOpen(false)
-    applyLocally(change)
-    await changeBookingStatus(order.id, change)
+    const before = flow
+    const after = flowAfter(before, change)
+    setFlow(after)
+    let result: StatusChangeResult
+    try {
+      result = await changeBookingStatus(order.id, change)
+    } catch {
+      // An expired session or a dropped connection rejects the call instead of returning { error }.
+      result = { error: 'Failed to update status.' }
+    }
+    // T-318: a refused change used to leave the optimistic patch standing — put back only what it touched.
+    if (statusNotice.report(result, 'booking', `${order.name} ${order.surname}`, order.id)) setFlow(cur => revertPatch(cur, before, after))
+    // Reopened a cancelled order whose card money already covers it: the server marked it Paid again.
+    else if ('success' in result && result.reopenedPaid) setFlow(prev => ({ ...prev, paidAt: new Date() }))
   }
 
   /** A menu step was clicked — 'paid' opens the method picker instead of
@@ -872,10 +900,19 @@ export default function OrderDetail({
     handleStatusChange(step.change)
   }
 
-  function handlePaymentMethodChosen(method: 'BANK_TRANSFER' | 'CASH') {
+  function openCardPopup() {
     setPickingPaymentMethod(false)
-    handleStatusChange({ kind: 'paid', value: true, method })
+    setStatusMenuOpen(false)
+    setCardPopup(true)
   }
+
+  // Is a card link already waiting? (so the mark shows on arrival, before the menu is ever opened). Read for a paid
+  // booking too: one that still owes a balance can have a top-up link open (T-318).
+  useEffect(() => {
+    let cancelled = false
+    getCardState('booking', order.id).then(s => { if (!cancelled && !('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [order.id, order.paidAt])
 
   async function handleSendInvoice() {
     setSending(true)
@@ -883,7 +920,7 @@ export default function OrderDetail({
     const result = await sendOrderInvoice(order.id, '')
     setSending(false)
     if ('error' in result) {
-      setSendMsg(at('orderDetail.sendFailed'))
+      setSendMsg(at((result.code && INVOICE_REFUSAL_KEY[result.code]) || 'orderDetail.sendFailed'))
     } else {
       setSendMsg(at('orders.emailModal.sent'))
       // Sending an invoice stamps a date and nothing else: it records that we
@@ -930,6 +967,8 @@ export default function OrderDetail({
   const [recordAmount, setRecordAmount] = useState('')
   const [recordLoading, setRecordLoading] = useState(false)
   const [recordMsg, setRecordMsg] = useState('')
+  // A Bank / Cash entry waiting for "record anyway" because a card link for this booking is still open.
+  const [recordWarn, setRecordWarn] = useState<'BANK_TRANSFER' | 'CASH' | null>(null)
 
   // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) ───────
   // Two steps, not one blind "generate and send" click: generating a real
@@ -1022,6 +1061,8 @@ export default function OrderDetail({
   // above does, so this never disagrees with what's shown as "Total".
   const displayedTotal = computedTotal ?? order.totalPrice
   const balance = balanceDue(displayedTotal, order.paymentsSettledTotal)
+  // A card link the guest can still pay (a declined one is not offered back: it is only warned about).
+  const liveOpenLink = openLink && !openLink.declined && new Date(openLink.expiresAt).getTime() > Date.now() ? openLink : null
 
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -1157,11 +1198,21 @@ export default function OrderDetail({
   // does, then converts at the boundary (bug #45's lesson) — the server is
   // still the one source of truth for "does this exceed the balance", this
   // is only what gates whether the buttons are clickable at all.
-  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH') {
+  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH', confirmed = false) {
     const amount = fromMajor(parseFloat(recordAmount) || 0)
     if (amount <= 0) return
     setRecordLoading(true)
     setRecordMsg('')
+    setRecordWarn(null)
+    if (!confirmed) {
+      // A card link cannot be cancelled: if one is still open the guest could pay it as well. Read fresh from the
+      // server, and fail closed - the same rule as the unpaid booking's picker (PaymentMethodChoices).
+      let st: Awaited<ReturnType<typeof getCardState>> | null = null
+      try { st = await getCardState('booking', order.id) } catch { st = null }
+      if (!st || 'error' in st) { setRecordLoading(false); setRecordMsg(at('paymentMethod.checkFailed')); return }
+      setOpenLink(st.openLink)
+      if (st.openLink) { setRecordLoading(false); setRecordWarn(method); return }
+    }
     const result = await recordTopUpPayment(order.id, { amount, method })
     setRecordLoading(false)
     if ('error' in result) {
@@ -1194,6 +1245,25 @@ export default function OrderDetail({
       setLinkMsg(result.error)
       return
     }
+    setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
+    setLinkCopied(false)
+    setEmailSent(false)
+    getCardState('booking', order.id).then(s => { if (!('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
+  }
+
+  // "Show the open link": asking again for the amount of the link that is already open hands that same link back
+  // (startTopUpCheckout reuses it) - no second link, with its QR / Copy / Email.
+  async function handleShowOpenLink() {
+    if (!liveOpenLink) return
+    setLinkLoading(true)
+    setLinkMsg('')
+    const result = await startOrderTopUpCheckout(order.id, { amount: asTetri(liveOpenLink.amount) })
+    setLinkLoading(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setStartingLink(true)
     setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
     setLinkCopied(false)
     setEmailSent(false)
@@ -1247,9 +1317,11 @@ export default function OrderDetail({
     ...unreachedStages(BOOKING_STAGES, flow)
       .filter(code => code !== CANCELLED)
       .map(code => ({ code, change: { kind: 'stage' as const, stage: code } })),
-    ...(flow.invoiceSentAt == null && flow.paidAt == null
+    // No Invoice-sent / Paid step on a booking that costs 0 ₾ (T-318 Q-12): there is nothing to collect.
+    ...(flow.invoiceSentAt == null && flow.paidAt == null && order.totalPrice !== 0
       ? [{ code: 'invoiced', change: { kind: 'invoiceSent' as const, value: true } }] : []),
-    ...(flow.paidAt == null
+    // Not on a cancelled booking either: it cannot be marked Paid by any method (the server refuses it too).
+    ...(flow.paidAt == null && order.totalPrice !== 0 && flow.stage !== CANCELLED
       ? [{ code: 'paid', change: { kind: 'paid' as const, value: true } }] : []),
     ...(flow.stage !== CANCELLED
       ? [{ code: CANCELLED, change: { kind: 'stage' as const, stage: CANCELLED } }] : []),
@@ -1278,7 +1350,9 @@ export default function OrderDetail({
               const cfg = styleFor(displayCode)
               return (
                 <button
-                  onClick={() => setStatusMenuOpen(o => !o)}
+                  // Always back to the step list: closing the menu while the picker was showing must not leave the
+                  // picker armed for the next opening.
+                  onClick={() => { setPickingPaymentMethod(false); setStatusMenuOpen(o => !o) }}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold border"
                   style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.color + '44' }}
                 >
@@ -1287,6 +1361,11 @@ export default function OrderDetail({
               )
             })()}
             {flow.invoiceSentAt != null && flow.paidAt == null && <InvoiceSentMark locale={locale} />}
+            {openLink && !openLink.declined && flow.paidAt == null && new Date(openLink.expiresAt).getTime() > Date.now() && (
+              <span className="inline-flex items-center rounded-full font-semibold" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem', padding: '0.1rem 0.5rem', lineHeight: 1.5 }}>
+                {at('orders.cardLinkOpen', { date: formatLinkDay(openLink.expiresAt, locale) })}
+              </span>
+            )}
             {statusMenuOpen && (
               <div
                 className="absolute left-0 z-30 rounded-lg shadow-lg border py-1 mt-1"
@@ -1294,23 +1373,21 @@ export default function OrderDetail({
                 onClick={e => e.stopPropagation()}
               >
                 {pickingPaymentMethod ? (
-                  <div className="px-3 py-2">
-                    <p className="text-xs mb-1.5" style={{ color: C.muted }}>{at('paymentMethod.howPaid')}</p>
-                    <div className="flex flex-col gap-1">
-                      <button onClick={() => handlePaymentMethodChosen('BANK_TRANSFER')}
-                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                        {at('paymentMethod.bankTransfer')}
-                      </button>
-                      <button onClick={() => handlePaymentMethodChosen('CASH')}
-                        className="text-left text-xs px-2 py-1 rounded font-medium text-white" style={{ backgroundColor: '#16a34a' }}>
-                        {at('paymentMethod.cash')}
-                      </button>
-                      <button onClick={() => setPickingPaymentMethod(false)}
-                        className="text-left text-xs px-2 py-0.5" style={{ color: C.muted }}>
-                        {at('paymentMethod.cancel')}
-                      </button>
-                    </div>
-                  </div>
+                  <PaymentMethodChoices
+                    locale={locale}
+                    getState={() => getCardState('booking', order.id)}
+                    onRecord={method => { setPickingPaymentMethod(false); handleStatusChange({ kind: 'paid', value: true, method }) }}
+                    onCard={openCardPopup}
+                    onCancel={() => setPickingPaymentMethod(false)}
+                    onAlreadyPaid={() => {
+                      // Paid in the meantime (the guest used the link): nothing left to record.
+                      setPickingPaymentMethod(false)
+                      setStatusMenuOpen(false)
+                      setFlow(f => ({ ...f, paidAt: f.paidAt ?? new Date() }))
+                      router.refresh()
+                    }}
+                    onOpenLink={setOpenLink}
+                  />
                 ) : menuSteps.map(step => (
                   <button
                     key={step.code}
@@ -1363,6 +1440,27 @@ export default function OrderDetail({
           )}
         </div>
       </div>
+
+      <StatusChangeNotice notice={statusNotice.notice} onDismiss={statusNotice.dismiss} locale={locale} className="mb-3" />
+      {cardPopup && (
+        <CardPaymentFor
+          kind="booking"
+          id={order.id}
+          locale={locale}
+          onLink={setOpenLink}
+          onPaid={() => {
+            setFlow(f => ({ ...f, paidAt: f.paidAt ?? new Date() }))
+            setOpenLink(null)
+            router.refresh()
+          }}
+          onClose={() => setCardPopup(false)}
+        />
+      )}
+      {isCancelled(flow) && (
+        <CardMoneyOnCancelledNotice
+          amount={order.payments.filter(p => p.method === 'CARD').reduce((sum, p) => sum + p.amount, 0)}
+          subject="booking" locale={locale} className="mb-3" />
+      )}
 
       {/* The merged one-line flow. Sits under the header rather than beside the
           pill because it is the whole story of the order, and the pill is only
@@ -2271,7 +2369,7 @@ export default function OrderDetail({
             KnownBugs #64) — only offered once there is a real, positive
             balance to collect. A credit (balance < 0) has nothing to record
             a payment against; that case is display-only. */}
-        {isPaid && balance > 0 && (
+        {isPaid && balance > 0 && !isCancelled(flow) && (
           <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
             {!recordingPayment ? (
               <button
@@ -2322,7 +2420,7 @@ export default function OrderDetail({
                       {at('paymentMethod.cash')}
                     </button>
                     <button
-                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg('') }}
+                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg(''); setRecordWarn(null) }}
                       disabled={recordLoading}
                       className="text-xs px-2 py-1.5"
                       style={{ color: C.muted }}
@@ -2330,6 +2428,22 @@ export default function OrderDetail({
                       {at('paymentMethod.cancel')}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            {recordWarn && openLink && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                <p role="alert" className="text-xs rounded-md px-2 py-1.5" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05' }}>
+                  {at('paymentMethod.linkOpenWarn', { amount: formatTetri(asTetri(openLink.amount)), date: formatLinkMoment(openLink.expiresAt, locale) })}
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => handleRecordPayment(recordWarn, true)} disabled={recordLoading}
+                    className="text-xs px-3 rounded font-medium text-white disabled:opacity-50" style={{ backgroundColor: '#16a34a', minHeight: 40 }}>
+                    {at(recordWarn === 'CASH' ? 'paymentMethod.anywayCash' : 'paymentMethod.anywayBank')}
+                  </button>
+                  <button onClick={() => setRecordWarn(null)} className="text-xs px-3" style={{ color: C.muted, minHeight: 40 }}>
+                    {at('paymentMethod.back')}
+                  </button>
                 </div>
               </div>
             )}
@@ -2343,20 +2457,32 @@ export default function OrderDetail({
             the guest's own card, alongside the manual entry above. Same gate
             as "Record payment": only offered against a real, positive
             balance. */}
-        {isPaid && balance > 0 && (
+        {isPaid && balance > 0 && !isCancelled(flow) && (
           <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {liveOpenLink && !startingLink && (
+              <p className="text-xs mb-1.5" style={{ color: '#92400e' }}>
+                {at('orderDetail.topUpCheckout.linkOpenNote', { amount: formatTetri(asTetri(liveOpenLink.amount), { decimals: true }), date: formatLinkDay(liveOpenLink.expiresAt, locale) })}
+              </p>
+            )}
             {!startingLink ? (
-              <button
-                onClick={() => {
-                  setStartingLink(true)
-                  setLinkAmount(String(toMajor(balance)))
-                  setLinkMsg('')
-                }}
-                className="text-sm font-medium"
-                style={{ color: C.wine }}
-              >
-                {at('orderDetail.topUpCheckout.button')}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                {liveOpenLink && (
+                  <button onClick={handleShowOpenLink} disabled={linkLoading} className="text-sm font-medium disabled:opacity-50" style={{ color: C.wine, minHeight: 40 }}>
+                    {at('orderDetail.topUpCheckout.showOpen')}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setStartingLink(true)
+                    setLinkAmount(String(toMajor(balance)))
+                    setLinkMsg('')
+                  }}
+                  className="text-sm font-medium"
+                  style={liveOpenLink ? { color: C.muted, minHeight: 40 } : { color: C.wine }}
+                >
+                  {liveOpenLink ? at('orderDetail.topUpCheckout.otherAmount') : at('orderDetail.topUpCheckout.button')}
+                </button>
+              </div>
             ) : !generatedLink ? (
               <div className="flex items-end gap-2 flex-wrap">
                 <div style={{ width: 110 }}>

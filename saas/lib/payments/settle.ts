@@ -3,6 +3,9 @@ import { countsOf } from '@/lib/pricingUtils'
 import { formatPreferredDate } from '@/lib/wineOrderDate'
 import { recordOrderEvent } from '@/lib/orderEvents'
 import { verifyCallbackSignature } from '@/lib/payments/flitt'
+import { isAdminLinkPayment } from '@/lib/payments/openLink'
+import { livePaidSum } from '@/lib/payments/manualPayment'
+import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import { getAllSettings } from '@/app/actions/settings'
 import { getAllContent } from '@/app/actions/siteContent'
 import { settingValue } from '@/lib/settings'
@@ -42,6 +45,16 @@ export type SettleResult =
       // leave the notification alone.
       orderId: string | null
       wineOrderId: string | null
+      // True when an admin's card link was paid (T-321), false for the guest's own checkout.
+      // Set on every ok result — also 'already-settled' — because the browser return can land
+      // second and still has to word its page right.
+      adminLink: boolean
+      // True when this settlement landed on a CANCELLED order (decided inside the settling transaction,
+      // under the order's row lock). The email sender stays silent for it. False on 'already-settled'.
+      afterCancellation: boolean
+      // True when THIS delivery's own verified status was 'approved' — the browser return uses it, because an
+      // 'already-settled' outcome alone cannot tell a duplicate approval from a duplicate decline.
+      approved: boolean
     }
   | { ok: false; reason: string }
 
@@ -103,6 +116,7 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // One instant shared by the Payment row and the order's own paidAt, so the
   // gateway record and the order can never disagree about when money arrived.
   const settledAt = new Date()
+  let landedOnCancelled = false
 
   const outcome = await withTenantDb(tenantId, async tx => {
     // ── Gate 3: idempotency ──────────────────────────────────────────────────
@@ -218,46 +232,73 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
     // loudly rather than leave a paid order filed under abandoned.
     const paidColumns = { paidAt: settledAt, abandonedAt: null }
 
+    // Read before anything is written: money that arrives on a CANCELLED order is recorded but must
+    // not mark it Paid (below) and must leave a trace a human can find — "refund it in Flitt".
+    // The flag rides in the event payload; a new OrderEventType would need a migration.
+    // Lock the order row first (as the admin status actions do): a reopen / Mark-paid happening at this
+    // very moment is then ordered before or after this settlement, never interleaved with it.
+    if (payment.orderId) await tx.$queryRaw`SELECT 1 FROM "Order" WHERE "id" = ${payment.orderId} FOR UPDATE`
+    else if (payment.wineOrderId) await tx.$queryRaw`SELECT 1 FROM "WineOrder" WHERE "id" = ${payment.wineOrderId} FOR UPDATE`
+    const stageNow = payment.orderId
+      ? (await tx.order.findUnique({ where: { id: payment.orderId }, select: { stage: true } }))?.stage
+      : payment.wineOrderId
+        ? (await tx.wineOrder.findUnique({ where: { id: payment.wineOrderId }, select: { stage: true } }))?.stage
+        : undefined
+    const afterCancellation = stageNow === 'CANCELLED'
+    landedOnCancelled = afterCancellation
+
     await recordOrderEvent(tx, {
       tenantId,
       orderId: payment.orderId,
       wineOrderId: payment.wineOrderId,
       type: 'PAID',
       actorType: 'GATEWAY',
-      payload: { provider: payment.provider, providerPaymentId, amount: payment.amount },
+      payload: {
+        provider: payment.provider,
+        providerPaymentId,
+        amount: payment.amount,
+        ...(afterCancellation ? { afterCancellation: true } : {}),
+      },
     })
 
-    // Guarded on stage rather than blindly set: an order a human already moved
-    // on — completed it, or cancelled it — must not have its fulfilment dragged
-    // backwards by a late callback. `stage: 'NEW'` says exactly that, which is
-    // what the old `status IN (NEW, PENDING_PAYMENT)` guard was reaching for
-    // through a column that mixed the two ideas together.
+    // Paid from ANY stage except CANCELLED (T-318 Q-3, 2026-10-29). Money often arrives long after
+    // the visit or delivery — a Completed booking, a Delivered wine order — exactly as a bank
+    // transfer or cash would, so the old `stage: 'NEW'` guard left those orders showing Unpaid
+    // although the card had been charged. Setting `paidAt` never touches `stage`, so nothing is
+    // dragged backwards. A CANCELLED order is the one exception (Q-2): a late payment on an old link
+    // is recorded (the Payment row settles above, the event above carries `afterCancellation`) but
+    // the order is not marked Paid — the money has to be refunded in Flitt, not honoured.
     //
-    // Also guarded on `paidAt: null` (KnownBugs.md #65, found 2026-09-25): the
-    // `stage: 'NEW'` guard alone answers "has a human moved this order along",
-    // not "has this order already been paid once" — and those are different
-    // facts. An order can collect a second, real, independent payment while
-    // still sitting in stage NEW (ordinary — not every booking gets its stage
-    // dropdown advanced): a manual deposit followed by a card top-up for the
-    // balance, or two separate Flitt payments, both shipped flows (see
-    // Plan-PostPaymentExtras.md chunks 3/4). Without this second condition,
-    // that second settlement's `updateMany` still matched on `stage: 'NEW'`
-    // alone and silently overwrote `paidAt` with the second payment's
-    // timestamp — so the order's "first paid" fact quietly moved forward on
-    // every subsequent real settlement, with nothing anywhere flagging the
-    // change. `paidAt: null` closes that: once the first settlement has set
-    // it, no later settlement's `updateMany` can match this row again, so
-    // `paidAt` is written exactly once. The `Payment` row for that second
-    // payment still settles normally either way (see the idempotency gate
-    // above) — only the order's own `paidAt` is protected here.
-    if (payment.orderId) {
+    // Also guarded on `paidAt: null` (KnownBugs.md #65, found 2026-09-25): without it, a second real,
+    // independent payment on an already-paid order (a manual deposit then a card top-up, or two
+    // Flitt payments — both shipped flows, Plan-PostPaymentExtras chunks 3/4) matched the same
+    // `updateMany` again and silently moved `paidAt` forward on every settlement. With it, `paidAt`
+    // is written exactly once; the second `Payment` row still settles normally (idempotency gate
+    // above) — only the order's own first-paid time is protected.
+    // An ADMIN card link (T-318) is for a fixed amount made at one moment; the price may have changed since
+    // (an extra added, a guest removed, a delivery fee set) while the link stayed payable — a link cannot be
+    // cancelled. So that money marks the order Paid only when everything on the ledger now covers the total;
+    // otherwise it is recorded (the Payment row settled above) and the order stays unpaid with a balance, which
+    // Bank / Cash / a new link then complete. The guest's own checkout is always for the full price, as before.
+    let coversTotal = true
+    if (isAdminLinkPayment(payment.flittOrderId)) {
+      if (payment.orderId) {
+        const o = await tx.order.findUnique({ where: { id: payment.orderId }, select: { totalPrice: true } })
+        coversTotal = o?.totalPrice != null && (await livePaidSum(tx, { orderId: payment.orderId })) >= o.totalPrice
+      } else if (payment.wineOrderId) {
+        const w = await tx.wineOrder.findUnique({ where: { id: payment.wineOrderId }, select: { totalAmount: true, deliveryFee: true } })
+        const due = w ? wineOrderAmountDue(w) : null
+        coversTotal = due != null && (await livePaidSum(tx, { wineOrderId: payment.wineOrderId })) >= due
+      }
+    }
+    if (coversTotal && payment.orderId) {
       await tx.order.updateMany({
-        where: { id: payment.orderId, stage: 'NEW', paidAt: null },
+        where: { id: payment.orderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,
       })
-    } else if (payment.wineOrderId) {
+    } else if (coversTotal && payment.wineOrderId) {
       await tx.wineOrder.updateMany({
-        where: { id: payment.wineOrderId, stage: 'NEW', paidAt: null },
+        where: { id: payment.wineOrderId, stage: { not: 'CANCELLED' }, paidAt: null },
         data: paidColumns,
       })
     }
@@ -279,7 +320,16 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
   // return — call `sendSettlementEmail` themselves via `after()`, using the
   // `orderId`/`wineOrderId` returned below. This function only reports the
   // outcome.
-  return { ok: true, outcome, tenantId, orderId: payment.orderId, wineOrderId: payment.wineOrderId }
+  return {
+    ok: true,
+    outcome,
+    tenantId,
+    orderId: payment.orderId,
+    wineOrderId: payment.wineOrderId,
+    adminLink: isAdminLinkPayment(payment.flittOrderId),
+    afterCancellation: outcome === 'settled' && landedOnCancelled,
+    approved,
+  }
 }
 
 /**
@@ -296,12 +346,39 @@ export async function settlePayment(body: Record<string, unknown>): Promise<Sett
  * genuinely inside a request (a script, a cron job, a queue worker): there is
  * no `after()` to schedule it with out there, so it would go right back to
  * being an unguaranteed fire-and-forget call — the exact bug this split fixed.
+ *
+ * `adminLink` (T-321): the payment came from a card link an admin made, not from the guest's own
+ * checkout. For a BOOKING that sends nothing — the booking already exists and was confirmed when
+ * it was made, so "your booking is confirmed / New paid booking" would be false (and would show
+ * the full total as the amount just paid). Same as Bank/Cash, which email nobody. A WINE ORDER's
+ * receipt is deliberately unchanged for now: it is accurate (it shows what has really been paid)
+ * and whether wine links should stay silent too is decided with the wine Card step
+ * (Plan-AdminCardPayments Chunk 6).
  */
 export async function sendSettlementEmail(
   tenantId: string,
   orderId: string | null,
-  wineOrderId: string | null
+  wineOrderId: string | null,
+  adminLink: boolean,
+  /** `SettleResult.afterCancellation` — decided at settle time. Left out by scripts: then the stage is read here. */
+  afterCancellation?: boolean
 ): Promise<void> {
+  if (adminLink && orderId) return
+
+  // Card money on a CANCELLED order (T-318 Q-2, Max 2026-10-29 "as recommended"): nobody is told
+  // "booking confirmed" / "New paid booking" / "your receipt" about an order that was called off.
+  // The money is on the ledger and the order page shows an amber "refund it in Flitt" notice.
+  // Service-role read, like the rest of this function: the tenant is the payment's own.
+  if (afterCancellation === true) return
+  if (afterCancellation === undefined) {
+    const stage = orderId
+      ? (await db.order.findUnique({ where: { id: orderId }, select: { stage: true } }))?.stage
+      : wineOrderId
+        ? (await db.wineOrder.findUnique({ where: { id: wineOrderId }, select: { stage: true } }))?.stage
+        : undefined
+    if (stage === 'CANCELLED') return
+  }
+
   const [tenant, settings] = await Promise.all([
     db.tenant.findUnique({ where: { id: tenantId }, select: { displayName: true, name: true, theme: true } }),
     getAllSettings(tenantId),

@@ -30,6 +30,7 @@
 // annotation fired but the email WAS found") rather than silently going
 // unnoticed forever.
 import { test, expect, Page } from '@playwright/test'
+import { db } from '../../lib/db'
 import { loginAsTenantAdmin } from '../helpers/auth'
 import {
   readPaymentSectionToggle, setPaymentSectionToggle,
@@ -112,7 +113,16 @@ async function deleteTestOrderOnAdminPage(page: Page, marker: string) {
   if (await row.count() > 0) {
     await row.getByRole('button', { name: 'Delete order' }).click()
     await row.getByRole('button', { name: 'Yes' }).click()
-    await expect(page.locator('tr', { hasText: marker })).toHaveCount(0)
+    // T-318: a booking with card money (or a card link that can still be paid) cannot be deleted from the admin any
+    // more - the server refuses and says "Cancel it instead". That refusal is the new, intended behaviour; the test's
+    // own cleanup then removes the throwaway order straight from the dev database.
+    const gone = await expect(page.locator('tr', { hasText: marker })).toHaveCount(0, { timeout: 8_000 }).then(() => true, () => false)
+    if (!gone) {
+      await expect(page.getByText(/Can’t delete/).first()).toBeVisible()
+      await db.order.deleteMany({ where: { OR: [{ name: { contains: marker } }, { surname: { contains: marker } }, { email: { contains: marker } }] } })
+      await page.goto('/admin/orders')
+      await expect(page.locator('tr', { hasText: marker })).toHaveCount(0)
+    }
   }
 }
 
