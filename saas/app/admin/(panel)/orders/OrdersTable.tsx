@@ -184,8 +184,7 @@ function menuSteps(order: Order): MenuStep[] {
  * restating the rules — two copies of "which columns does this change move" is
  * exactly the drift that an optimistic update hides until someone reloads.
  */
-function optimisticPatch(o: Order, change: BookingStatusChange) {
-  const now = new Date()
+function optimisticPatch(o: Order, change: BookingStatusChange, now: Date = new Date()) {
   const dates = {
     confirmedAt: o.confirmedAt ? new Date(o.confirmedAt) : null,
     finishedAt: o.completedAt ? new Date(o.completedAt) : null,
@@ -947,14 +946,18 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
     setStatusMenuId(null)
     setStatusMenuRect(null)
     const before = orders.find(o => o.id === orderId)
-    const after = before ? { ...before, ...optimisticPatch(before, change) } : undefined
+    // ONE timestamp for both the "after" snapshot and the state update below: the updater runs later, at render, and a
+    // second `new Date()` there would differ by a few ms, so revertPatch would think the field changed again and
+    // leave a refused "Paid" standing on the row (found in the 375 px check, T-318).
+    const now = new Date()
+    const after = before ? { ...before, ...optimisticPatch(before, change, now) } : undefined
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
       // Literally the same patch functions the server is about to call, so the
       // pill and the payment mark move on click instead of waiting for the
       // round trip — and the optimistic view cannot drift from the real write,
       // which is where that kind of drift would be invisible.
-      return { ...o, ...optimisticPatch(o, change) }
+      return { ...o, ...optimisticPatch(o, change, now) }
     }))
     let result: StatusChangeResult
     try {
