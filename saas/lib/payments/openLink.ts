@@ -52,6 +52,16 @@ export type OpenAdminLink = {
   checkoutUrl: string
   createdAt: Date
   expiresAt: Date
+  /** 'created' / 'processing', or 'declined' when asked for with `includeDeclined`. */
+  status: string
+}
+
+/**
+ * The advisory-lock key that serialises everything which creates, or deletes the order under, an admin
+ * link: link creation (topUpCheckout.ts) and order delete (actions/orders.ts) must use the same key.
+ */
+export function adminLinkLockKey(ref: { orderId: string } | { wineOrderId: string }): string {
+  return `admin-link:${'orderId' in ref ? ref.orderId : ref.wineOrderId}`
 }
 
 /**
@@ -72,6 +82,10 @@ export async function findOpenAdminLink(
     /** Also count the guest's OWN checkout (no admin marker; payable for ~10 h after it was made). Used by the
      *  Bank / Cash warning: an abandoned order is exactly an order with such a checkout still open. */
     includeGuest?: boolean
+    /** Also a link whose last attempt was declined. Flitt lets the payer retry on the same link until it
+     *  expires, so it can still turn into money. For the Bank / Cash warning and the delete guard only —
+     *  it is never offered as a link to copy or resend. */
+    includeDeclined?: boolean
   } = {}
 ): Promise<OpenAdminLink | null> {
   const now = opts.now ?? new Date()
@@ -79,7 +93,7 @@ export async function findOpenAdminLink(
     where: {
       ...ref,
       provider: 'flitt',
-      status: { in: ['created', 'processing'] },
+      status: { in: opts.includeDeclined ? ['created', 'processing', 'declined'] : ['created', 'processing'] },
       settledAt: null,
       reversedAt: null,
       ...(opts.includeGuest ? {} : { flittOrderId: { contains: ADMIN_LINK_MARKER } }),
@@ -88,14 +102,35 @@ export async function findOpenAdminLink(
       createdAt: { gt: new Date(now.getTime() - SEVEN_DAYS_MS) },
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, amount: true, checkoutUrl: true, createdAt: true, flittOrderId: true },
+    select: { id: true, amount: true, checkoutUrl: true, createdAt: true, flittOrderId: true, status: true },
   })
   for (const r of rows) {
     if (!r.checkoutUrl || (!opts.includeGuest && !isAdminLinkPayment(r.flittOrderId))) continue
     const expiresAt = adminLinkExpiresAt(r.createdAt, r.flittOrderId)
-    if (expiresAt > now) return { id: r.id, amount: r.amount, checkoutUrl: r.checkoutUrl, createdAt: r.createdAt, expiresAt }
+    if (expiresAt > now) return { id: r.id, amount: r.amount, checkoutUrl: r.checkoutUrl, createdAt: r.createdAt, expiresAt, status: r.status }
   }
   return null
+}
+
+export const CARD_TRAIL_DELETE_REFUSAL =
+  'This order has card payments or a card link that can still be paid, so it cannot be deleted. Cancel it instead.'
+
+/**
+ * Why a booking must not be deleted, or null when it may be. Deleting an order deletes its Payment rows
+ * (the schema cascades), so an order with card money on it, or a card link that can still be paid, would
+ * lose the only record of money that sits in Flitt — and a payment arriving after the delete would find
+ * nothing to attach to. Cancel keeps the trail. Manual (Bank / Cash) payments are not a reason to refuse.
+ */
+export async function cardTrailDeleteRefusal(
+  client: TxClient,
+  ref: { orderId: string } | { wineOrderId: string }
+): Promise<string | null> {
+  const settled = await client.payment.count({
+    where: { ...ref, provider: 'flitt', settledAt: { not: null }, reversedAt: null },
+  })
+  if (settled > 0) return CARD_TRAIL_DELETE_REFUSAL
+  const open = await findOpenAdminLink(client, ref, { includeGuest: true, includeDeclined: true })
+  return open ? CARD_TRAIL_DELETE_REFUSAL : null
 }
 
 /**
@@ -104,13 +139,19 @@ export async function findOpenAdminLink(
  * is worse than none). Pure, so the rule is tested without a request.
  */
 export function linkEmailRefusal(
-  link: { settledAt: Date | null; createdAt: Date; flittOrderId: string | null },
+  link: { settledAt: Date | null; createdAt: Date; flittOrderId: string | null; amount?: number },
   orderStage: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** What the order still owes right now (tetri), when known. A link for more than that would overpay:
+   *  the order was paid some other way (or partly) after the link was made. */
+  stillOwed?: number
 ): string | null {
   if (orderStage === 'CANCELLED') return 'This order is cancelled, so it cannot take a payment.'
   if (link.settledAt) return 'This link has already been paid.'
   if (adminLinkExpiresAt(link.createdAt, link.flittOrderId) <= now) return 'This link has expired — make a new one.'
+  if (stillOwed !== undefined && link.amount !== undefined && link.amount > stillOwed) {
+    return 'This order no longer owes this amount (it was paid some other way since the link was made), so the link is not sent.'
+  }
   return null
 }
 

@@ -26,7 +26,7 @@ import { adminT } from '@/lib/adminT'
 import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNotice'
 import { CardMoneyOnCancelledNotice } from '@/components/CardMoneyOnCancelledNotice'
 import { revertPatch } from '@/lib/revertPatch'
-import { formatLinkDay } from '@/lib/formatLinkMoment'
+import { formatLinkDay, formatLinkMoment } from '@/lib/formatLinkMoment'
 import PaymentMethodChoices from '@/components/PaymentMethodChoices'
 import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
 import type { StatusChangeResult } from '@/lib/statusRefusal'
@@ -791,7 +791,7 @@ export default function OrderDetail({
   // T-318 Chunks 5–6 — the Card step (shared components: PaymentMethodChoices, CardPaymentFor). `openLink`: a card
   // link for this booking that can still be paid — drives the "link open" mark.
   const [cardPopup, setCardPopup] = useState(false)
-  const [openLink, setOpenLink] = useState<{ amount: number; expiresAt: string } | null>(null)
+  const [openLink, setOpenLink] = useState<{ amount: number; expiresAt: string; declined?: boolean } | null>(null)
   const [sending, setSending] = useState(false)
   const [sendMsg, setSendMsg] = useState('')
   const [printReady, setPrintReady] = useState(false)
@@ -906,9 +906,9 @@ export default function OrderDetail({
     setCardPopup(true)
   }
 
-  // Is a card link already waiting? (so the mark shows on arrival, before the menu is ever opened)
+  // Is a card link already waiting? (so the mark shows on arrival, before the menu is ever opened). Read for a paid
+  // booking too: one that still owes a balance can have a top-up link open (T-318).
   useEffect(() => {
-    if (order.paidAt != null) return
     let cancelled = false
     getCardState('booking', order.id).then(s => { if (!cancelled && !('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
     return () => { cancelled = true }
@@ -967,6 +967,8 @@ export default function OrderDetail({
   const [recordAmount, setRecordAmount] = useState('')
   const [recordLoading, setRecordLoading] = useState(false)
   const [recordMsg, setRecordMsg] = useState('')
+  // A Bank / Cash entry waiting for "record anyway" because a card link for this booking is still open.
+  const [recordWarn, setRecordWarn] = useState<'BANK_TRANSFER' | 'CASH' | null>(null)
 
   // ── Card-link top-up (Plan-PostPaymentExtras Chunk 4, KnownBugs #64) ───────
   // Two steps, not one blind "generate and send" click: generating a real
@@ -1059,6 +1061,8 @@ export default function OrderDetail({
   // above does, so this never disagrees with what's shown as "Total".
   const displayedTotal = computedTotal ?? order.totalPrice
   const balance = balanceDue(displayedTotal, order.paymentsSettledTotal)
+  // A card link the guest can still pay (a declined one is not offered back: it is only warned about).
+  const liveOpenLink = openLink && !openLink.declined && new Date(openLink.expiresAt).getTime() > Date.now() ? openLink : null
 
   // ── Selected item for add-line form ───────────────────────────────────────
   const selectedMcItem = masterclassItems.find(i => i.id === newLineItemId)
@@ -1194,11 +1198,21 @@ export default function OrderDetail({
   // does, then converts at the boundary (bug #45's lesson) — the server is
   // still the one source of truth for "does this exceed the balance", this
   // is only what gates whether the buttons are clickable at all.
-  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH') {
+  async function handleRecordPayment(method: 'BANK_TRANSFER' | 'CASH', confirmed = false) {
     const amount = fromMajor(parseFloat(recordAmount) || 0)
     if (amount <= 0) return
     setRecordLoading(true)
     setRecordMsg('')
+    setRecordWarn(null)
+    if (!confirmed) {
+      // A card link cannot be cancelled: if one is still open the guest could pay it as well. Read fresh from the
+      // server, and fail closed - the same rule as the unpaid booking's picker (PaymentMethodChoices).
+      let st: Awaited<ReturnType<typeof getCardState>> | null = null
+      try { st = await getCardState('booking', order.id) } catch { st = null }
+      if (!st || 'error' in st) { setRecordLoading(false); setRecordMsg(at('paymentMethod.checkFailed')); return }
+      setOpenLink(st.openLink)
+      if (st.openLink) { setRecordLoading(false); setRecordWarn(method); return }
+    }
     const result = await recordTopUpPayment(order.id, { amount, method })
     setRecordLoading(false)
     if ('error' in result) {
@@ -1231,6 +1245,25 @@ export default function OrderDetail({
       setLinkMsg(result.error)
       return
     }
+    setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
+    setLinkCopied(false)
+    setEmailSent(false)
+    getCardState('booking', order.id).then(s => { if (!('error' in s)) setOpenLink(s.openLink) }).catch(() => {})
+  }
+
+  // "Show the open link": asking again for the amount of the link that is already open hands that same link back
+  // (startTopUpCheckout reuses it) - no second link, with its QR / Copy / Email.
+  async function handleShowOpenLink() {
+    if (!liveOpenLink) return
+    setLinkLoading(true)
+    setLinkMsg('')
+    const result = await startOrderTopUpCheckout(order.id, { amount: asTetri(liveOpenLink.amount) })
+    setLinkLoading(false)
+    if ('error' in result) {
+      setLinkMsg(result.error)
+      return
+    }
+    setStartingLink(true)
     setGeneratedLink({ checkoutUrl: result.checkoutUrl, paymentId: result.paymentId })
     setLinkCopied(false)
     setEmailSent(false)
@@ -1328,7 +1361,7 @@ export default function OrderDetail({
               )
             })()}
             {flow.invoiceSentAt != null && flow.paidAt == null && <InvoiceSentMark locale={locale} />}
-            {openLink && flow.paidAt == null && new Date(openLink.expiresAt).getTime() > Date.now() && (
+            {openLink && !openLink.declined && flow.paidAt == null && new Date(openLink.expiresAt).getTime() > Date.now() && (
               <span className="inline-flex items-center rounded-full font-semibold" style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.7rem', padding: '0.1rem 0.5rem', lineHeight: 1.5 }}>
                 {at('orders.cardLinkOpen', { date: formatLinkDay(openLink.expiresAt, locale) })}
               </span>
@@ -2387,7 +2420,7 @@ export default function OrderDetail({
                       {at('paymentMethod.cash')}
                     </button>
                     <button
-                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg('') }}
+                      onClick={() => { setRecordingPayment(false); setRecordAmount(''); setRecordMsg(''); setRecordWarn(null) }}
                       disabled={recordLoading}
                       className="text-xs px-2 py-1.5"
                       style={{ color: C.muted }}
@@ -2395,6 +2428,22 @@ export default function OrderDetail({
                       {at('paymentMethod.cancel')}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+            {recordWarn && openLink && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                <p role="alert" className="text-xs rounded-md px-2 py-1.5" style={{ backgroundColor: '#fdf3dc', border: '1px solid #e8c777', color: '#5c3d05' }}>
+                  {at('paymentMethod.linkOpenWarn', { amount: formatTetri(asTetri(openLink.amount)), date: formatLinkMoment(openLink.expiresAt, locale) })}
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => handleRecordPayment(recordWarn, true)} disabled={recordLoading}
+                    className="text-xs px-3 rounded font-medium text-white disabled:opacity-50" style={{ backgroundColor: '#16a34a', minHeight: 40 }}>
+                    {at(recordWarn === 'CASH' ? 'paymentMethod.anywayCash' : 'paymentMethod.anywayBank')}
+                  </button>
+                  <button onClick={() => setRecordWarn(null)} className="text-xs px-3" style={{ color: C.muted, minHeight: 40 }}>
+                    {at('paymentMethod.back')}
+                  </button>
                 </div>
               </div>
             )}
@@ -2410,18 +2459,30 @@ export default function OrderDetail({
             balance. */}
         {isPaid && balance > 0 && !isCancelled(flow) && (
           <div className="mt-3 pt-3 border-t" style={{ borderColor: C.border }}>
+            {liveOpenLink && !startingLink && (
+              <p className="text-xs mb-1.5" style={{ color: '#92400e' }}>
+                {at('orderDetail.topUpCheckout.linkOpenNote', { amount: formatTetri(asTetri(liveOpenLink.amount), { decimals: true }), date: formatLinkDay(liveOpenLink.expiresAt, locale) })}
+              </p>
+            )}
             {!startingLink ? (
-              <button
-                onClick={() => {
-                  setStartingLink(true)
-                  setLinkAmount(String(toMajor(balance)))
-                  setLinkMsg('')
-                }}
-                className="text-sm font-medium"
-                style={{ color: C.wine }}
-              >
-                {at('orderDetail.topUpCheckout.button')}
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                {liveOpenLink && (
+                  <button onClick={handleShowOpenLink} disabled={linkLoading} className="text-sm font-medium disabled:opacity-50" style={{ color: C.wine, minHeight: 40 }}>
+                    {at('orderDetail.topUpCheckout.showOpen')}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setStartingLink(true)
+                    setLinkAmount(String(toMajor(balance)))
+                    setLinkMsg('')
+                  }}
+                  className="text-sm font-medium"
+                  style={liveOpenLink ? { color: C.muted, minHeight: 40 } : { color: C.wine }}
+                >
+                  {liveOpenLink ? at('orderDetail.topUpCheckout.otherAmount') : at('orderDetail.topUpCheckout.button')}
+                </button>
+              </div>
             ) : !generatedLink ? (
               <div className="flex items-end gap-2 flex-wrap">
                 <div style={{ width: 110 }}>

@@ -87,6 +87,11 @@ const NOT_FREE = { OR: [{ totalPrice: null }, { totalPrice: { not: 0 } }] }
  * on a free booking must not sit in the chasing list); a 0 ₾ booking that was
  * marked Paid in the past stays `paid` — history is not rewritten.
  *
+ * A cancelled, unpaid booking answers `nothing` too (T-318, Max 2026-10-30): it cannot be marked Paid any more,
+ * so leaving it in `unpaid` / `invoiced` would keep it in the chasing list, the counts and the CSV for good.
+ * It stays visible under the Cancelled status and in the unfiltered list. A cancelled booking that WAS paid
+ * stays `paid` — history is not rewritten. (Wine orders have no payment filter and never reach `nothing`.)
+ *
  * An unrecognised value matches everything rather than nothing, so a stale
  * bookmark shows the unfiltered list instead of an empty one that reads as "you
  * have no orders".
@@ -96,11 +101,11 @@ export function paymentFilterWhere(payment: string | undefined | null) {
     case 'paid':
       return { paidAt: { not: null } }
     case 'invoiced':
-      return { paidAt: null, invoiceSentAt: { not: null }, ...NOT_FREE }
+      return { paidAt: null, invoiceSentAt: { not: null }, ...NOT_CANCELLED, ...NOT_FREE }
     case 'unpaid':
-      return { paidAt: null, invoiceSentAt: null, ...NOT_FREE }
+      return { paidAt: null, invoiceSentAt: null, ...NOT_CANCELLED, ...NOT_FREE }
     case 'nothing':
-      return { paidAt: null, totalPrice: 0 }
+      return { paidAt: null, OR: [{ totalPrice: 0 }, { stage: 'CANCELLED' as const }] }
     default:
       return {}
   }
@@ -112,9 +117,12 @@ export function paymentStateOf(o: {
   invoiceSentAt?: Date | string | null
   /** Bookings only. Left out (wine orders, callers without it) → never `nothing`. */
   totalPrice?: number | null
+  /** Bookings only, with `totalPrice`: a cancelled, unpaid booking owes nothing. */
+  stage?: string
 }): PaymentFilter {
   if (o.paidAt != null) return 'paid'
   if (o.totalPrice === 0) return 'nothing'
+  if (o.totalPrice !== undefined && o.stage === 'CANCELLED') return 'nothing'
   if (o.invoiceSentAt != null) return 'invoiced'
   return 'unpaid'
 }

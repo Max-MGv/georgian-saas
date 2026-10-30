@@ -410,6 +410,8 @@ const en: Translations = {
   'statusNotice.cancelled.title': 'Cancelled order.',
   'statusNotice.cancelled.booking': 'This booking{who} is cancelled, so it can’t be marked paid. Reopen it first if it should take a payment.',
   'statusNotice.cancelled.wine': 'This wine order{who} is cancelled, so it can’t be marked paid. Reopen it first if it should take a payment.',
+  'statusNotice.cardTrail.title': 'Can’t delete.',
+  'statusNotice.cardTrail.body': 'This booking{who} has card payments or a card link that can still be paid, so deleting it would lose the record of that money. Cancel it instead.',
   'statusNotice.failed.title': 'The status was not changed.',
   'statusNotice.failed.body': 'Nothing was saved — please try again.',
   'cardOnCancelled.booking': '{amount} was paid by card on this cancelled booking. Refund it in Flitt if it is due.',
@@ -734,6 +736,9 @@ const en: Translations = {
   'orderDetail.topUpCheckout.qrHint': 'Ask the guest to scan this with their phone camera.',
   'orderDetail.topUpCheckout.qrAria': 'QR code for the card payment link',
   'orderDetail.topUpCheckout.openLink': 'Open link',
+  'orderDetail.topUpCheckout.linkOpenNote': 'A card link for {amount} is open until {date} — the guest can still pay it.',
+  'orderDetail.topUpCheckout.showOpen': 'Show the open link',
+  'orderDetail.topUpCheckout.otherAmount': 'Different amount',
   'orderDetail.topUpCheckout.closeQr': 'Close',
 
   // Companies page
@@ -2040,6 +2045,8 @@ const ka: Translations = {
   'statusNotice.cancelled.title': 'გაუქმებული შეკვეთა.',
   'statusNotice.cancelled.booking': 'ეს ჯავშანი{who} გაუქმებულია, ამიტომ გადახდილად ვერ აღინიშნება. თუ გადახდა უნდა მიიღოს, ჯერ თავიდან გახსენით.',
   'statusNotice.cancelled.wine': 'ეს ღვინის შეკვეთა{who} გაუქმებულია, ამიტომ გადახდილად ვერ აღინიშნება. თუ გადახდა უნდა მიიღოს, ჯერ თავიდან გახსენით.',
+  'statusNotice.cardTrail.title': 'წაშლა შეუძლებელია.',
+  'statusNotice.cardTrail.body': 'ამ ჯავშანს{who} აქვს ბარათით გადახდა ან ბარათის ბმული, რომელიც ჯერ კიდევ შეიძლება გადაიხადონ, ამიტომ წაშლით ამ ფულის ჩანაწერი დაიკარგებოდა. სანაცვლოდ გააუქმეთ.',
   'statusNotice.failed.title': 'სტატუსი არ შეიცვალა.',
   'statusNotice.failed.body': 'არაფერი შეინახა — სცადეთ ხელახლა.',
   'cardOnCancelled.booking': 'ამ გაუქმებულ ჯავშანზე ბარათით გადახდილია {amount}. საჭიროების შემთხვევაში დააბრუნეთ თანხა Flitt-ში.',
@@ -2369,6 +2376,9 @@ const ka: Translations = {
   'orderDetail.topUpCheckout.qrHint': 'სთხოვეთ სტუმარს, დაასკანიროს ტელეფონის კამერით.',
   'orderDetail.topUpCheckout.qrAria': 'QR კოდი ბარათით გადახდის ბმულისთვის',
   'orderDetail.topUpCheckout.openLink': 'ბმულის გახსნა',
+  'orderDetail.topUpCheckout.linkOpenNote': 'ბარათის ბმული {amount}-ზე ღიაა {date}-მდე — სტუმარს მისი გადახდა ჯერ კიდევ შეუძლია.',
+  'orderDetail.topUpCheckout.showOpen': 'ღია ბმულის ჩვენება',
+  'orderDetail.topUpCheckout.otherAmount': 'სხვა თანხა',
   'orderDetail.topUpCheckout.closeQr': 'დახურვა',
 
   // Companies page

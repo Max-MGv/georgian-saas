@@ -12,7 +12,7 @@
  * - `CANCELLED`       — a cancelled order cannot be marked Paid by any method (Max, 2026-10-30; the
  *                       card paths and the top-up recorders already refuse it).
  */
-export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY' | 'CANCELLED'
+export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY' | 'CANCELLED' | 'CARD_TRAIL'
 
 const CANCELLED_NOT_PAYABLE = 'This order is cancelled, so it cannot be marked paid.'
 

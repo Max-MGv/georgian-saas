@@ -231,7 +231,7 @@ function Mark({ label, glyph, bg, color }: { label: string; glyph: string; bg: s
  * financial axis has already moved off `invoiced`.
  */
 function PaymentMark({ order, locale }: {
-  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null; totalPrice?: number | null }
+  order: { paidAt: Date | string | null; invoiceSentAt: Date | string | null; totalPrice?: number | null; stage?: string }
   locale: string
 }) {
   if (paymentStateOf(order) === 'paid') {
@@ -1029,10 +1029,13 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
   async function handleDelete(id: string) {
     setLoading(true)
-    await deleteOrder(id)
-    setOrders(prev => prev.filter(o => o.id !== id))
+    const result = await deleteOrder(id)
     setDeletingId(null)
     setLoading(false)
+    const gone = orders.find(o => o.id === id)
+    // A refused delete (card money / open card link) keeps the row and says why.
+    if (statusNotice.report(result, 'booking', gone ? `${gone.name} ${gone.surname}` : null, id)) return
+    setOrders(prev => prev.filter(o => o.id !== id))
   }
 
   async function handleUpdate() {

@@ -5,7 +5,7 @@ import { writeOrderContacts, syncOrderContactPerson, type IncomingContact, type 
 import { invoiceRecipientsFor } from '@/lib/contactResolution'
 import { recordManualPayment, reverseManualPayments, recordAdditionalPayment, liveMoneyCovers, livePaidSum } from '@/lib/payments/manualPayment'
 import { startTopUpCheckout, linkRefusal } from '@/lib/payments/topUpCheckout'
-import { linkEmailRefusal, findOpenAdminLink, isAdminLinkPayment } from '@/lib/payments/openLink'
+import { linkEmailRefusal, findOpenAdminLink, isAdminLinkPayment, adminLinkLockKey, cardTrailDeleteRefusal } from '@/lib/payments/openLink'
 import { sendTopUpCheckoutEmail } from '@/lib/emails/topUpCheckoutEmail'
 import { recordOrderEvent, eventTypeForChange } from '@/lib/orderEvents'
 import { asTetri, balanceDue, toMajor, type Tetri } from '@/lib/money'
@@ -41,12 +41,21 @@ import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFi
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
 const VALID_COUNTRY_CODES = new Set(COUNTRIES.map(c => c.code))
 
-export async function deleteOrder(id: string) {
+export async function deleteOrder(id: string): Promise<StatusChangeResult> {
   await requireAdmin()
   // A crafted object here would become a Prisma filter and could match every order of the tenant.
   if (typeof id !== 'string' || !id) return { error: 'Order not found.' }
   const tenantId = await getTenantId()
-  await withTenantDb(tenantId, tx => tx.order.deleteMany({ where: { id, tenantId } }))
+  const refusal = await withTenantDb(tenantId, async tx => {
+    // The same lock card-link creation takes: a link being made at this moment is either seen below or waits
+    // for this delete (and then finds no order) — never created for an order that is already gone.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${adminLinkLockKey({ orderId: id })}))`
+    const why = await cardTrailDeleteRefusal(tx, { orderId: id })
+    if (why) return why
+    await tx.order.deleteMany({ where: { id, tenantId } })
+    return null
+  })
+  if (refusal) return { error: refusal, code: 'CARD_TRAIL' }
   revalidatePath('/admin/orders')
   revalidatePath('/admin/statistics')
   return { success: true }
@@ -643,6 +652,9 @@ export async function sendOrderInvoice(
     if (!order) return { error: 'Order not found.' }
     // A genuinely free booking (total set and 0 GEL, Q-12) has nothing to invoice; its menu step is gone, this is the rule.
     if (order.totalPrice === 0) return { error: 'Nothing to pay on this booking.' }
+    // An unpriced booking would be invoiced as 0 ₾, and a cancelled one asks for money that is no longer owed.
+    if (order.totalPrice == null) return { error: 'This booking has no price yet — set the price before sending an invoice.' }
+    if (order.stage === 'CANCELLED') return { error: 'This booking is cancelled, so no invoice can be sent. Reopen it first.' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
       const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []
@@ -1246,7 +1258,7 @@ export async function startOrderCardPayment(orderId: string): Promise<
  * the guest could still pay it — a link cannot be cancelled). Read-only.
  */
 export async function getOrderCardState(orderId: string): Promise<
-  | { paid: boolean; openLink: { amount: number; expiresAt: string } | null }
+  | { paid: boolean; openLink: { amount: number; expiresAt: string; declined?: boolean } | null }
   | { error: string }
 > {
   await requireAdmin()
@@ -1254,12 +1266,15 @@ export async function getOrderCardState(orderId: string): Promise<
   const found = await withTenantDb(tenantId, async tx => ({
     order: await tx.order.findFirst({ where: { id: orderId, tenantId }, select: { paidAt: true } }),
     // includeGuest: the Bank / Cash warning must also cover the guest's own checkout, still payable for ~10 h.
-    open: await findOpenAdminLink(tx, { orderId }, { includeGuest: true }),
+    // includeDeclined: after a decline Flitt lets the guest retry on the same link until it expires.
+    open: await findOpenAdminLink(tx, { orderId }, { includeGuest: true, includeDeclined: true }),
   }))
   if (!found.order) return { error: 'Order not found.' }
   return {
     paid: found.order.paidAt != null,
-    openLink: found.open ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString() } : null,
+    openLink: found.open
+      ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString(), ...(found.open.status === 'declined' ? { declined: true } : {}) }
+      : null,
   }
 }
 
@@ -1282,10 +1297,14 @@ export async function sendOrderTopUpCheckoutEmail(
   await requireAdmin()
   const tenantId = await getTenantId()
 
-  const order = await withTenantDb(tenantId, tx => tx.order.findFirst({
-    where: { id: orderId, tenantId },
-    select: { name: true, surname: true, email: true, date: true, timeSlot: true, stage: true },
+  const found = await withTenantDb(tenantId, async tx => ({
+    order: await tx.order.findFirst({
+      where: { id: orderId, tenantId },
+      select: { name: true, surname: true, email: true, date: true, timeSlot: true, stage: true, totalPrice: true },
+    }),
+    paid: await livePaidSum(tx, { orderId }),
   }))
+  const order = found.order
   if (!order) return { error: 'Order not found.' }
   if (!order.email) return { error: 'This order has no email address.' }
 
@@ -1296,7 +1315,7 @@ export async function sendOrderTopUpCheckoutEmail(
   // Only a card link an admin made: never the guest's own (possibly declined / old) checkout URL.
   if (!payment || !payment.checkoutUrl || !isAdminLinkPayment(payment.flittOrderId)) return { error: 'Checkout link not found.' }
   // Never mail a link that is already paid, expired, or belongs to a cancelled order.
-  const refused = linkEmailRefusal(payment, order.stage)
+  const refused = linkEmailRefusal(payment, order.stage, new Date(), balanceDue(order.totalPrice, found.paid))
   if (refused) return { error: refused }
 
   const [wineryAddress, wineryEmail, tenant] = await Promise.all([

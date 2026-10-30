@@ -492,20 +492,23 @@ export async function startWineOrderCardPayment(id: string): Promise<
 
 /** What the Card popup polls, and what the picker asks before recording Bank / Cash — see getOrderCardState. */
 export async function getWineOrderCardState(id: string): Promise<
-  | { paid: boolean; openLink: { amount: number; expiresAt: string } | null }
+  | { paid: boolean; openLink: { amount: number; expiresAt: string; declined?: boolean } | null }
   | { error: string }
 > {
   await requireAdmin()
   const tenantId = await getTenantId()
   const found = await withTenantDb(tenantId, async tx => ({
     order: await tx.wineOrder.findFirst({ where: { id, tenantId }, select: { paidAt: true } }),
-    // includeGuest: also the customer's own checkout, still payable for ~10 h (see getOrderCardState).
-    open: await findOpenAdminLink(tx, { wineOrderId: id }, { includeGuest: true }),
+    // includeGuest: also the customer's own checkout, still payable for ~10 h; includeDeclined: a declined
+    // link can still be retried until it expires (see getOrderCardState).
+    open: await findOpenAdminLink(tx, { wineOrderId: id }, { includeGuest: true, includeDeclined: true }),
   }))
   if (!found.order) return { error: 'Wine order not found.' }
   return {
     paid: found.order.paidAt != null,
-    openLink: found.open ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString() } : null,
+    openLink: found.open
+      ? { amount: found.open.amount, expiresAt: found.open.expiresAt.toISOString(), ...(found.open.status === 'declined' ? { declined: true } : {}) }
+      : null,
   }
 }
 

@@ -17,7 +17,7 @@ import { PAYMENT_FILTERS, paymentFilterWhere, paymentStateOf, type PaymentFilter
 import { seedStageColumns } from '../lib/statusWrite'
 
 if (!process.argv.includes('--write')) {
-  console.log('Dry run (no --write): would create 8 throwaway bookings on the DEV database, check the four')
+  console.log('Dry run (no --write): would create 12 throwaway bookings on the DEV database, check the four')
   console.log('payment states and filters against them, then delete them. Add --write to run it.')
   process.exit(0)
 }
@@ -35,14 +35,14 @@ function check(label: string, ok: boolean, detail = '') {
 
 async function main() {
   const ids: string[] = []
-  const mk = (tag: string, total: number | null, f: { paid?: boolean; invoiced?: boolean } = {}) =>
+  const mk = (tag: string, total: number | null, f: { paid?: boolean; invoiced?: boolean; cancelled?: boolean } = {}) =>
     db.order.create({
       data: {
         tenantId: TENANT, bookingType: 'INDIVIDUAL', visitType: 'TASTING', date: new Date('2030-08-01'), timeSlot: '12:00',
         guestCount: 2, name: 'ZZ', surname: `${PREFIX}-${tag}`, totalPrice: total,
         ...(f.paid ? { paidAt: new Date(Date.now() - 2 * DAY) } : {}),
         ...(f.invoiced ? { invoiceSentAt: new Date(Date.now() - 3 * DAY) } : {}),
-        ...seedStageColumns('booking', 'CONFIRMED', new Date(Date.now() - 5 * DAY)),
+        ...seedStageColumns('booking', f.cancelled ? 'CANCELLED' : 'CONFIRMED', new Date(Date.now() - 5 * DAY)),
       },
     }).then(o => { ids.push(o.id); return o })
 
@@ -51,6 +51,8 @@ async function main() {
       'free-unpaid': 'nothing', 'free-paid-before': 'paid', 'free-old-invoice': 'nothing',
       'noprice-unpaid': 'unpaid', 'noprice-invoiced': 'invoiced',
       'real-unpaid': 'unpaid', 'real-invoiced': 'invoiced', 'real-paid': 'paid',
+      // Cancelled (T-318, 2026-10-30): cannot be marked Paid any more, so it leaves the chasing buckets.
+      'cancelled-unpaid': 'nothing', 'cancelled-invoiced': 'nothing', 'cancelled-noprice': 'nothing', 'cancelled-paid-before': 'paid',
     }
     await mk('free-unpaid', 0)
     await mk('free-paid-before', 0, { paid: true })
@@ -60,6 +62,10 @@ async function main() {
     await mk('real-unpaid', 15000)
     await mk('real-invoiced', 15000, { invoiced: true })
     await mk('real-paid', 15000, { paid: true })
+    await mk('cancelled-unpaid', 15000, { cancelled: true })
+    await mk('cancelled-invoiced', 15000, { cancelled: true, invoiced: true })
+    await mk('cancelled-noprice', null, { cancelled: true })
+    await mk('cancelled-paid-before', 15000, { cancelled: true, paid: true })
 
     console.log('\nThe pill (paymentStateOf)\n')
     const rows = await db.order.findMany({ where: { tenantId: TENANT, surname: { startsWith: PREFIX } } })
@@ -86,6 +92,9 @@ async function main() {
       bucket.unpaid.includes('noprice-unpaid') && bucket.invoiced.includes('noprice-invoiced'))
     check('no 0 ₾ row is ever in "unpaid" or "invoiced"',
       !bucket.unpaid.some(t => t.startsWith('free')) && !bucket.invoiced.some(t => t.startsWith('free')))
+    check('no cancelled, unpaid row is ever in "unpaid" or "invoiced" (they can never be marked Paid)',
+      !bucket.unpaid.some(t => t.startsWith('cancelled')) && !bucket.invoiced.some(t => t.startsWith('cancelled')))
+    check('…and a cancelled booking that was PAID before stays in "paid"', bucket.paid.includes('cancelled-paid-before'))
     check('an unrecognised filter value still matches everything', (await db.order.count({ where: { ...scope, ...paymentFilterWhere('bogus') } })) === rows.length)
   } finally {
     await db.order.deleteMany({ where: { id: { in: ids } } })

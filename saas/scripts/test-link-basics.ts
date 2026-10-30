@@ -8,6 +8,8 @@
  *   Part B  startTopUpCheckout / startWineTopUpCheckout hand back the open link for the SAME amount
  *           instead of making a second one (no Flitt call on that path).
  *   Part C  the reconcile job's window: guest checkout 7 days, admin link 9, nothing younger than 1 h.
+ *   Part C2 the delete guard (card money / a link that can still be paid blocks deleting a booking) and the
+ *           link-email "no longer owed" check. Declined links count for the warning + guard (Part A).
  *   Part D  (--flitt) createCheckout with `lifetime: 604800` + `lang: 'ka'` against the test merchant:
  *           Flitt accepts it. Creates one unpaid test checkout at Flitt; writes nothing to our DB.
  *
@@ -18,8 +20,8 @@
 import { db } from '../lib/db'
 import { createCheckout } from '../lib/payments/flitt'
 import {
-  ADMIN_LINK_LIFETIME_SECONDS, adminLinkExpiresAt, adminLinkLifetimeMs, findOpenAdminLink, isAdminLinkPayment, linkEmailRefusal,
-  reconcileCandidateWhere,
+  ADMIN_LINK_LIFETIME_SECONDS, adminLinkExpiresAt, adminLinkLifetimeMs, cardTrailDeleteRefusal, findOpenAdminLink, isAdminLinkPayment,
+  linkEmailRefusal, reconcileCandidateWhere,
 } from '../lib/payments/openLink'
 import { mintTopUpFlittOrderId, pickCheckoutLocale, startTopUpCheckout, startWineTopUpCheckout } from '../lib/payments/topUpCheckout'
 import { seedStageColumns } from '../lib/statusWrite'
@@ -92,6 +94,13 @@ async function main() {
     await mk('reversed', { ref: `${order.id}-topup-7d-rv-rv`, age: 1 * HOUR, reversed: true })
     check('a REVERSED admin link is not open (default lookup)', (await findOpenAdminLink(db, { orderId: order.id })) === null)
     await db.payment.deleteMany({ where: { providerPaymentId: `${PREFIX}-reversed` } })
+
+    // A declined link can still be retried by the payer until it expires (Flitt), so the warning + delete guard count it.
+    const dec = await findOpenAdminLink(db, { orderId: order.id }, { includeDeclined: true })
+    check('includeDeclined: the 1-day-old DECLINED 7-day link is open, flagged declined', dec?.status === 'declined' && dec.checkoutUrl.endsWith('/declined'), JSON.stringify(dec))
+    const decGuest = await findOpenAdminLink(db, { orderId: order.id }, { includeDeclined: true, includeGuest: true })
+    check('…with the guest checkout too, the newest (the 1-h-old guest one) wins', decGuest?.checkoutUrl.endsWith('/guest') === true && decGuest.status === 'created')
+    check('…and the plain lookup still ignores the declined link (never offered as a link to copy)', (await findOpenAdminLink(db, { orderId: order.id })) === null)
 
     await mk('old2h', { ref: `${order.id}-topup-ii-jj`, age: 2 * HOUR, amount: 4000 })
     const o1 = await findOpenAdminLink(db, { orderId: order.id })
@@ -168,6 +177,58 @@ async function main() {
       .map(p => p.providerPaymentId!.replace(`${PREFIX}-r-`, '')).sort()
     check('asked about: guest checkout 3 d and admin link 8 d', JSON.stringify(hits) === JSON.stringify(['guest3d', 'link8d']), JSON.stringify(hits))
     check('left alone: younger than 1 h; guest checkout 8 d (past 7); admin link 10 d (past 9)', !hits.includes('guest30m') && !hits.includes('link30m') && !hits.includes('guest8d') && !hits.includes('link10d'))
+
+    // ── Part C2 ──────────────────────────────────────────────────────────────────
+    console.log('\nPart C2 — delete guard and the link-email amount check\n')
+    const mkBooking = async (tag: string) => {
+      const o = await db.order.create({
+        data: {
+          tenantId: TENANT, bookingType: 'INDIVIDUAL', visitType: 'TASTING', date: new Date('2030-08-01'), timeSlot: '12:00',
+          guestCount: 2, name: 'ZZ', surname: `${PREFIX}-${tag}`, totalPrice: 10000, ...seedStageColumns('booking', 'CONFIRMED', ago(5 * DAY)),
+        },
+      })
+      orderIds.push(o.id)
+      return o
+    }
+    const pay = (orderId: string, tag: string, f: { provider?: string; ref?: string | null; age: number; status?: string; settled?: boolean; reversed?: boolean }) =>
+      db.payment.create({
+        data: {
+          tenantId: TENANT, orderId, provider: f.provider ?? 'flitt', providerPaymentId: `${PREFIX}-${tag}`, checkoutUrl: `https://pay.example.invalid/${tag}`,
+          flittOrderId: f.ref === undefined ? orderId : f.ref, amount: 10000, status: f.status ?? 'created', createdAt: ago(f.age),
+          settledAt: f.settled ? ago(f.age) : null, reversedAt: f.reversed ? new Date() : null,
+        },
+      })
+    const g = (id: string) => cardTrailDeleteRefusal(db, { orderId: id })
+    const clean = await mkBooking('del-clean')
+    check('delete guard: no payments at all → may be deleted', (await g(clean.id)) === null)
+    const manual = await mkBooking('del-manual')
+    await pay(manual.id, 'dm', { provider: 'manual', ref: null, age: 1 * DAY, status: 'recorded', settled: true })
+    check('…a manual (Bank / Cash) payment is not a reason to refuse', (await g(manual.id)) === null)
+    const settled = await mkBooking('del-settled')
+    await pay(settled.id, 'ds', { age: 1 * DAY, status: 'approved', settled: true })
+    check('…a settled card payment refuses', /card payments/.test((await g(settled.id)) ?? ''))
+    const openAdmin = await mkBooking('del-open')
+    await pay(openAdmin.id, 'do', { ref: `${openAdmin.id}-topup-7d-aa-bb`, age: 2 * DAY })
+    check('…an admin card link that can still be paid refuses', (await g(openAdmin.id)) !== null)
+    const guestOpen = await mkBooking('del-guest')
+    await pay(guestOpen.id, 'dg', { age: 1 * HOUR })
+    check('…the guest\'s own checkout, still payable, refuses', (await g(guestOpen.id)) !== null)
+    const declinedOpen = await mkBooking('del-declined')
+    await pay(declinedOpen.id, 'dd', { ref: `${declinedOpen.id}-topup-7d-cc-dd`, age: 1 * DAY, status: 'declined' })
+    check('…a declined link inside its lifetime refuses (the payer may retry)', (await g(declinedOpen.id)) !== null)
+    const declinedOld = await mkBooking('del-declined-old')
+    await pay(declinedOld.id, 'do2', { ref: `${declinedOld.id}-topup-7d-ee-ff`, age: 8 * DAY, status: 'declined' })
+    await pay(declinedOld.id, 'do3', { age: 3 * DAY, status: 'declined' })
+    check('…declined links past their lifetime do not', (await g(declinedOld.id)) === null)
+    const reversed = await mkBooking('del-reversed')
+    await pay(reversed.id, 'dr', { age: 1 * DAY, status: 'approved', settled: true, reversed: true })
+    check('…a card payment marked reversed does not', (await g(reversed.id)) === null)
+
+    const LK = { settledAt: null, createdAt: ago(1 * HOUR), flittOrderId: 'x-topup-7d-a-b', amount: 5000 }
+    check('link email: link amount equals what is still owed → allowed', linkEmailRefusal(LK, 'CONFIRMED', new Date(), 5000) === null)
+    check('link email: less than the link amount is owed (paid another way since) → refused', /no longer owes/.test(linkEmailRefusal(LK, 'CONFIRMED', new Date(), 2000) ?? ''))
+    check('link email: nothing owed any more → refused', /no longer owes/.test(linkEmailRefusal(LK, 'CONFIRMED', new Date(), 0) ?? ''))
+    check('link email: owed amount not supplied → no amount check (old callers unchanged)', linkEmailRefusal(LK, 'CONFIRMED') === null)
 
     // ── Part D ───────────────────────────────────────────────────────────────────
     if (process.argv.includes('--flitt')) {

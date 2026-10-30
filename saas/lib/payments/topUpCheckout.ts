@@ -56,7 +56,7 @@ import { startCheckout } from '@/lib/payments/startCheckout'
 import { wineOrderBalance, CANCELLED_REFUSAL } from '@/lib/payments/manualPayment'
 import { wineOrderAmountDue } from '@/lib/wineOrderMoney'
 import {
-  ADMIN_LINK_MARKER, ADMIN_LINK_LIFETIME_SECONDS, LINK_7D_TAG, adminLinkExpiresAt, findOpenAdminLink,
+  ADMIN_LINK_MARKER, ADMIN_LINK_LIFETIME_SECONDS, LINK_7D_TAG, adminLinkExpiresAt, adminLinkLockKey, findOpenAdminLink,
 } from '@/lib/payments/openLink'
 import { getAllSettings } from '@/app/actions/settings'
 import { settingValue } from '@/lib/settings'
@@ -162,7 +162,7 @@ async function oneLinkAtATime(
   // Everything that needs another connection is read BEFORE the lock is taken: inside it the step runs on
   // the transaction's own connection only, so a small serverless pool cannot deadlock against itself.
   const prep = await prepareCheckout(input.tenantId, input.locale)
-  const key = `admin-link:${'orderId' in ref ? ref.orderId : ref.wineOrderId}`
+  const key = adminLinkLockKey(ref)
   return db.$transaction(async tx => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
     const reused = await reuseOpenLink(tx, ref, input.amount)

@@ -17,7 +17,9 @@ import { formatLinkMoment } from '@/lib/formatLinkMoment'
  * ("Record cash anyway"; "Card" reopens the SAME link). If the order was paid in the meantime it says so
  * instead of recording a second payment.
  */
-export type CardState = { paid: boolean; openLink: { amount: number; expiresAt: string } | null }
+/** `declined`: the guest's last attempt on this link was declined, but Flitt lets them retry until it expires — it
+ *  warns Bank / Cash like an open link, yet is not shown as a link to copy. */
+export type CardState = { paid: boolean; openLink: { amount: number; expiresAt: string; declined?: boolean } | null }
 
 type Method = 'BANK_TRANSFER' | 'CASH'
 
