@@ -589,6 +589,9 @@ const en: Translations = {
   'orderDetail.sendInvoiceTitle': 'Send invoice by email',
   'orderDetail.noEmailTitle': 'No email address on file',
   'orderDetail.sendFailed': 'Failed to send.',
+  'invoiceRefusal.noPrice': 'This booking has no price yet — set the price before sending an invoice.',
+  'invoiceRefusal.cancelled': 'This booking is cancelled, so no invoice can be sent. Reopen it first.',
+  'invoiceRefusal.nothingToPay': 'There is nothing to pay on this booking.',
 
   'orderDetail.bookingInfo.title': 'Booking Info',
   'orderDetail.bookingInfo.date': 'Date',
@@ -2227,6 +2230,9 @@ const ka: Translations = {
   'orderDetail.sendInvoiceTitle': 'ინვოისის გაგზავნა ელ-ფოსტით',
   'orderDetail.noEmailTitle': 'ელ-ფოსტის მისამართი მითითებული არ არის',
   'orderDetail.sendFailed': 'გაგზავნა ვერ მოხერხდა.',
+  'invoiceRefusal.noPrice': 'ამ ჯავშანს ფასი ჯერ არ აქვს — ინვოისის გაგზავნამდე მიუთითეთ ფასი.',
+  'invoiceRefusal.cancelled': 'ეს ჯავშანი გაუქმებულია, ამიტომ ინვოისი ვერ გაიგზავნება. ჯერ თავიდან გახსენით.',
+  'invoiceRefusal.nothingToPay': 'ამ ჯავშანზე გადასახდელი არაფერია.',
 
   'orderDetail.bookingInfo.title': 'ჯავშნის ინფორმაცია',
   'orderDetail.bookingInfo.date': 'თარიღი',

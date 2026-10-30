@@ -29,7 +29,7 @@ import { revertPatch } from '@/lib/revertPatch'
 import { formatLinkDay, formatLinkMoment } from '@/lib/formatLinkMoment'
 import PaymentMethodChoices from '@/components/PaymentMethodChoices'
 import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
-import type { StatusChangeResult } from '@/lib/statusRefusal'
+import { INVOICE_REFUSAL_KEY, type StatusChangeResult } from '@/lib/statusRefusal'
 import {
   bookingStagePatch,
   invoiceSentPatch,
@@ -920,7 +920,7 @@ export default function OrderDetail({
     const result = await sendOrderInvoice(order.id, '')
     setSending(false)
     if ('error' in result) {
-      setSendMsg(at('orderDetail.sendFailed'))
+      setSendMsg(at((result.code && INVOICE_REFUSAL_KEY[result.code]) || 'orderDetail.sendFailed'))
     } else {
       setSendMsg(at('orders.emailModal.sent'))
       // Sending an invoice stamps a date and nothing else: it records that we

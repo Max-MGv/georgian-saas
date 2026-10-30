@@ -35,7 +35,7 @@ import {
 } from '@/lib/statusWrite'
 // Types come from lib/, never from a 'use server' file — MaintenanceNotes §24.
 import type { BookingStatusChange } from '@/lib/statusWrite'
-import { bookingMoneyRefusal, malformedChange, type StatusChangeResult } from '@/lib/statusRefusal'
+import { bookingMoneyRefusal, malformedChange, type StatusChangeResult, type StatusRefusalCode } from '@/lib/statusRefusal'
 import { NOT_ABANDONED, paymentFilterWhere, paymentStateOf } from '@/lib/orderFilters'
 
 // Not exported: a 'use server' file may only export async functions (MaintenanceNotes §24).
@@ -624,7 +624,7 @@ export async function sendOrderInvoice(
   // (Plan-ContactRoles Chunk 11) — falls back to order.email when omitted. Re-checked against
   // lib/contactResolution.ts's invoiceRecipientsFor() below, not trusted as-is.
   recipientEmail?: string
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true } | { error: string; code?: StatusRefusalCode }> {
   await requireAdmin()
   const tenantId = await getTenantId()
   try {
@@ -651,10 +651,10 @@ export async function sendOrderInvoice(
 
     if (!order) return { error: 'Order not found.' }
     // A genuinely free booking (total set and 0 GEL, Q-12) has nothing to invoice; its menu step is gone, this is the rule.
-    if (order.totalPrice === 0) return { error: 'Nothing to pay on this booking.' }
+    if (order.totalPrice === 0) return { error: 'Nothing to pay on this booking.', code: 'NOTHING_TO_PAY' }
     // An unpriced booking would be invoiced as 0 ₾, and a cancelled one asks for money that is no longer owed.
-    if (order.totalPrice == null) return { error: 'This booking has no price yet — set the price before sending an invoice.' }
-    if (order.stage === 'CANCELLED') return { error: 'This booking is cancelled, so no invoice can be sent. Reopen it first.' }
+    if (order.totalPrice == null) return { error: 'This booking has no price yet — set the price before sending an invoice.', code: 'NO_PRICE' }
+    if (order.stage === 'CANCELLED') return { error: 'This booking is cancelled, so no invoice can be sent. Reopen it first.', code: 'CANCELLED' }
     let recipient = order.email
     if (recipientEmail && recipientEmail !== order.email) {
       const eligible = order.companyId ? await invoiceRecipientsFor(tenantId, [order.companyId]) : []

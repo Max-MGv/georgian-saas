@@ -10,7 +10,7 @@ import { StatusChangeNotice, useStatusNotice } from '@/components/StatusChangeNo
 import { revertPatch } from '@/lib/revertPatch'
 import PaymentMethodChoices from '@/components/PaymentMethodChoices'
 import CardPaymentFor, { getCardState } from '@/components/CardPaymentFor'
-import type { StatusChangeResult } from '@/lib/statusRefusal'
+import { INVOICE_REFUSAL_KEY, type StatusChangeResult } from '@/lib/statusRefusal'
 import { lineTotals } from '@/lib/orderLines'
 import { wineLineLabel, type InvoiceAddOnLine, type InvoiceWineLine } from '@/lib/invoiceLines'
 import InvoicePrint from './InvoicePrint'
@@ -789,6 +789,8 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   const [sendLocale, setSendLocale] = useState<'en' | 'ka'>('ka')
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<'sent' | 'error' | null>(null)
+  // The server's reason when it refused (no price / cancelled), as an adminT key; null = the generic failure.
+  const [emailErrorKey, setEmailErrorKey] = useState<string | null>(null)
   // Which address to actually send to (Plan-CompanyGuidesAndReps Chunk 9) — defaults to the
   // order's own email, but a company booking can pick one of its Representatives instead.
   const [recipientEmail, setRecipientEmail] = useState('')
@@ -894,11 +896,12 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
   async function handleSendEmail() {
     if (!emailOrder) return
     setEmailSending(true)
-    setEmailStatus(null)
+    setEmailStatus(null); setEmailErrorKey(null)
     const result = await sendOrderInvoice(emailOrder.id, emailMessage, sendLocale, recipientEmail || undefined)
     setEmailSending(false)
     if ('error' in result) {
       setEmailStatus('error')
+      setEmailErrorKey((result.code && INVOICE_REFUSAL_KEY[result.code]) || null)
     } else {
       setEmailStatus('sent')
       // Reflect the invoice date in local state. It is recorded whatever stage
@@ -1604,7 +1607,7 @@ export default function OrdersTable({ orders: initial, payment, detailed, defaul
 
                   {/* Status */}
                   {emailStatus === 'error' && (
-                    <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{at('orders.emailModal.sendFailed')}</p>
+                    <p className="text-sm mb-3" style={{ color: '#b91c1c' }}>{at(emailErrorKey ?? 'orders.emailModal.sendFailed')}</p>
                   )}
                   {emailStatus === 'sent' && (
                     <p className="text-sm mb-3" style={{ color: '#16a34a' }}>{at('orders.emailModal.sentSuccess')}</p>

@@ -16,6 +16,13 @@ export type StatusRefusalCode = 'NO_PRICE' | 'NOTHING_TO_PAY' | 'CANCELLED' | 'C
 
 const CANCELLED_NOT_PAYABLE = 'This order is cancelled, so it cannot be marked paid.'
 
+/** adminT key for each refusal `sendOrderInvoice` can return with a `code` — the UIs show these instead of a bare "Failed to send". */
+export const INVOICE_REFUSAL_KEY: Partial<Record<StatusRefusalCode, string>> = {
+  NO_PRICE: 'invoiceRefusal.noPrice',
+  CANCELLED: 'invoiceRefusal.cancelled',
+  NOTHING_TO_PAY: 'invoiceRefusal.nothingToPay',
+}
+
 export type StatusChangeResult =
   /** `reopenedPaid`: a cancelled order was reopened and, because card money already covers it, marked Paid again. */
   | { success: true; reopenedPaid?: true }
